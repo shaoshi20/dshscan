@@ -6,9 +6,17 @@
   "bin": {
     "dshscan": "dist/main.js"
   },
-  "main": "dist/main.js",
+  "main": "dsh-plugin/index.mjs",
+  "exports": {
+    ".": "./dsh-plugin/index.mjs",
+    "./cli": "./dist/main.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist/",
+    "dsh-plugin/",
+    "cordis.patch.yml",
     "src/",
     "README.md",
     "LICENSE",
@@ -45,10 +53,19 @@
     "access": "public",
     "registry": "https://registry.npmjs.org"
   },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6"
+  },
   "dependencies": {
     "adm-zip": "^0.5.16"
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6",
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",

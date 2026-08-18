@@ -1,0 +1,8 @@
+# DShScan bundle patch: mounts the dshscan security scanner into a DSH profile.
+# Optional config:
+#   index: path to dshbase-directory.json (defaults to DSCAN_INDEX / ~/.dsh)
+- insert:
+    - id: dshscan
+      name: '@shaoshi/dshscan'
+      config:
+        index: ''
