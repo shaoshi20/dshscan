@@ -26,22 +26,6 @@ npm run build
 
 构建后生成 `dist/main.js`，可通过 `dshscan.cmd` 或 `node dist/main.js` 调用。
 
-## npm 发布
-
-- npm 包名：**`@shaoshi/dshscan`**
-- 全局安装：
-  ```bash
-  npm install -g @shaoshi/dshscan
-  ```
-- 已配置 `publishConfig.registry = https://registry.npmjs.org` 和 `access = public`。
-- 手动发布：
-  ```bash
-  npm login
-  npm publish
-  ```
-- 自动发布：每次创建 GitHub Release 时，`.github/workflows/npm-publish.yml` 会自动执行 `npm test` + `npm publish`。
-- 自动发布使用 npm **Trusted Publishing（OIDC）**，无需长期 NPM_TOKEN；已在 npm 后台为 `@shaoshi/dshscan` 配置 GitHub Actions 信任关系。
-
 ## 使用
 
 ```bash
