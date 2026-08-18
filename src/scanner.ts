@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import AdmZip from "adm-zip";
 import { runSemantic } from "./semantic.js";
@@ -14,8 +14,16 @@ import type {
   TargetKind,
 } from "./types.js";
 
-const DEFAULT_INDEX =
-  process.env.DSCAN_INDEX ?? "E:/workspace/deepseek/work/dshbase-plugin-directory/dshbase-directory.json";
+function defaultIndexPath(): string {
+  if (process.env.DSCAN_INDEX) return process.env.DSCAN_INDEX;
+  const homeCandidate = join(homedir(), ".dsh", "dshbase-directory.json");
+  if (existsSync(homeCandidate)) return homeCandidate;
+  const localCandidate = join(process.cwd(), "dshbase-directory.json");
+  if (existsSync(localCandidate)) return localCandidate;
+  return homeCandidate;
+}
+
+const DEFAULT_INDEX = defaultIndexPath();
 const TOOL_NAME = "DShScan";
 const TOOL_VERSION = "0.1.0";
 

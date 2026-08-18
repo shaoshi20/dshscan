@@ -1,3 +1,11 @@
 node_modules/
 *.log
 .DS_Store
+
+# Local environment / secrets
+.env
+.env.*
+*.env
+
+# Local dshbase plugin index (machine-specific)
+dshbase-directory.json

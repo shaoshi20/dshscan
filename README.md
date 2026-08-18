@@ -19,7 +19,7 @@ DSH 插件安全审查器（DShScan），模仿 NVIDIA SkillSpector 机制，为
 ## 安装与构建
 
 ```bash
-cd E:\workspace\deepseek\work\dshscan
+cd path/to/dshscan
 npm install
 npm run build
 ```
@@ -75,7 +75,7 @@ dshscan OpenViking --output report.json --pretty
 
 | 变量 | 用途 | 默认 |
 |---|---|---|
-| `DSCAN_INDEX` | dshbase 插件索引 JSON 路径 | 本机默认索引路径 |
+| `DSCAN_INDEX` | dshbase 插件索引 JSON 路径 | `~/.dsh/dshbase-directory.json`（可用环境变量覆盖） |
 | `DSCAN_LLM_API_KEY` | 语义扫描 API Key | 无（未设置则仅静态扫描） |
 | `OPENAI_API_KEY` | 备选 API Key | 无 |
 | `DSCAN_LLM_BASE_URL` | OpenAI 兼容接口地址 | `https://api.openai.com/v1` |
