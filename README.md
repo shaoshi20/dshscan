@@ -30,29 +30,29 @@ npm run build
 
 ```bash
 # 扫描 dshbase 插件（按名称自动查索引，并尝试 clone 源码）
-dshscan OpenViking
-dshscan dsh-openviking
+dshscan <plugin-name>
+dshscan another-plugin
 
 # 扫描 GitHub 仓库
-dshscan github:volcengine/OpenViking
-dshscan https://github.com/volcengine/OpenViking
+dshscan github:owner/repo
+dshscan https://github.com/owner/repo
 
 # 扫描本地目录 / zip / md
-dshscan E:\path\to\plugin
+dshscan /path/to/plugin
 dshscan plugin.zip
 dshscan README.md
 
 # 仅离线扫描（不 clone 远程仓库，只给索引元数据 + 静态限制说明）
-dshscan OpenViking --offline
+dshscan <plugin-name> --offline
 
 # 启用 LLM 语义扫描（需要设置 DSCAN_LLM_API_KEY 或 OPENAI_API_KEY）
-dshscan OpenViking --semantic
+dshscan <plugin-name> --semantic
 
 # 自定义 LLM 接入
-dshscan OpenViking --semantic --llm-base-url https://api.openai.com/v1 --llm-model gpt-4o-mini
+dshscan <plugin-name> --semantic --llm-base-url https://api.openai.com/v1 --llm-model gpt-4o-mini
 
 # 输出到文件
-dshscan OpenViking --output report.json --pretty
+dshscan <plugin-name> --output report.json --pretty
 ```
 
 ## 环境变量
@@ -70,19 +70,19 @@ dshscan OpenViking --output report.json --pretty
 ```json
 {
   "tool": "DShScan",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "target": {
     "kind": "plugin",
-    "raw": "OpenViking",
-    "displayName": "OpenViking",
-    "repoUrl": "https://github.com/volcengine/OpenViking.git",
+    "raw": "some-plugin",
+    "displayName": "some-plugin",
+    "repoUrl": "https://github.com/owner/some-plugin.git",
     "metadata": {
-      "name": "OpenViking",
-      "stars": 28734,
+      "name": "some-plugin",
+      "stars": 120,
       "trust": "silver",
       "verified": true,
       "npm": false,
-      "cmd": "dsh plugin add github:volcengine/OpenViking"
+      "cmd": "dsh plugin add github:owner/some-plugin"
     }
   },
   "risk_score": 0,
@@ -94,12 +94,12 @@ dshscan OpenViking --output report.json --pretty
   "scan_mode": "static",
   "scan_note": "仅静态扫描，非完整扫描。",
   "metadata": {
-    "name": "OpenViking",
-    "stars": 28734,
+    "name": "some-plugin",
+    "stars": 120,
     "trust": "silver",
     "verified": true,
     "npm": false,
-    "cmd": "dsh plugin add github:volcengine/OpenViking"
+    "cmd": "dsh plugin add github:owner/some-plugin"
   }
 }
 ```
