@@ -107,6 +107,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   if (values.output) {
     writeFileSync(values.output, json, "utf-8");
     console.error(`Report written to ${values.output}`);
+    console.error(
+      `Summary: risk_score=${report.risk_score} severity=${report.severity} safe_to_install=${report.safe_to_install} findings=${report.findings.length}`,
+    );
   } else {
     console.log(json);
   }

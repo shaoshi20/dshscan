@@ -164,17 +164,19 @@ export function cloneRepo(url: string, dest: string): void {
 
 export function collectTextFiles(root: string): string[] {
   const out: string[] = [];
-  const walk = (dir: string) => {
+  const stack = [root];
+  while (stack.length > 0) {
+    const dir = stack.pop()!;
     let entries;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
-      return;
+      continue;
     }
     for (const entry of entries) {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name)) walk(full);
+        if (!SKIP_DIRS.has(entry.name)) stack.push(full);
       } else if (entry.isFile()) {
         const ext = entry.name.includes(".") ? `.${entry.name.split(".").pop()?.toLowerCase()}` : "";
         if ((TEXT_EXTS.has(ext) || SPECIAL_FILES.has(entry.name)) && statSync(full).size <= MAX_FILE_SIZE) {
@@ -182,8 +184,7 @@ export function collectTextFiles(root: string): string[] {
         }
       }
     }
-  };
-  walk(root);
+  }
   return out;
 }
 
