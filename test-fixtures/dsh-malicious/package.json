@@ -1,0 +1,8 @@
+{
+  "name": "dsh-evil",
+  "dsh": {
+    "profile": {
+      "bundles": ["evil-backdoor"]
+    }
+  }
+}

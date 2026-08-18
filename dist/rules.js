@@ -112,4 +112,39 @@ export function buildFinding(rule, evidence, source = "static") {
         rule: rule.id,
     };
 }
+export const DSH_SPECIFIC_RULES = [
+    {
+        id: "R010",
+        severity: "high",
+        category: "dsh-plugin-tree-injection",
+        title: "cordis.patch.yml plugin tree injection",
+        recommendation: "Review every inserted loader row and disabled override. A plugin must not disable security rows or add arbitrary MCP/exec rows without explicit user consent.",
+    },
+    {
+        id: "R011",
+        severity: "high",
+        category: "dsh-client-side-code",
+        title: "Browser-side malicious client code",
+        recommendation: "Audit client.mjs / browser-injected code for keylogging, clipboard theft, external beaconing, DOM injection, or crypto-mining. Client code runs in the user's DSH web session.",
+    },
+    {
+        id: "R012",
+        severity: "critical",
+        category: "dsh-profile-tampering",
+        title: "DSH profile configuration tampering",
+        recommendation: "Plugins must not alter profile security config, disable approval/permission rows, or rewrite profile files. Reject any package that attempts to tamper with the DSH profile.",
+    },
+];
+export function buildDshFinding(spec, evidence, source = "static") {
+    return {
+        id: spec.id,
+        severity: spec.severity,
+        category: spec.category,
+        title: spec.title,
+        evidence,
+        recommendation: spec.recommendation,
+        source,
+        rule: spec.id,
+    };
+}
 //# sourceMappingURL=rules.js.map

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import AdmZip from "adm-zip";
 import { runSemantic } from "./semantic.js";
-import { buildFinding, RULES, SEVERITY_WEIGHTS } from "./rules.js";
+import { buildDshFinding, buildFinding, DSH_SPECIFIC_RULES, RULES, SEVERITY_WEIGHTS } from "./rules.js";
 import type {
   Finding,
   PluginMeta,
@@ -234,6 +234,189 @@ export function scanText(text: string, fileLabel: string, source: "static" = "st
       }
     } catch {
       // ignore malformed package.json; other rules may still flag it
+    }
+  }
+
+  // DSH-specific attack surface rules (cordis.patch.yml, client.mjs, profile tampering).
+  const dshFindings = scanDshSpecific(fileLabel, text, source);
+  for (const f of dshFindings) {
+    if (TEST_RE.test(fileLabel) || DOCKER_RE.test(fileLabel) || (DOC_RE.test(fileLabel) && f.id !== "R008")) {
+      f.severity = downgradeSeverity(f.severity);
+    }
+    findings.push(f);
+  }
+
+  return findings;
+}
+
+function isClientFile(fileLabel: string): boolean {
+  const lower = fileLabel.toLowerCase();
+  const base = basename(lower);
+  return (
+    base === "client.mjs" ||
+    base === "client.js" ||
+    base === "client.ts" ||
+    base.endsWith(".client.mjs") ||
+    base.endsWith(".client.js") ||
+    base.endsWith(".client.ts") ||
+    /(^|\/)client\/.*\.(?:mjs|js|ts)$/.test(lower)
+  );
+}
+
+function isProfileConfigFile(fileLabel: string): boolean {
+  const lower = fileLabel.toLowerCase();
+  const base = basename(lower);
+  return (
+    base === "cordis.yml" ||
+    base === "cordis.patch.yml" ||
+    base === "package.json" ||
+    base === "pnpm-workspace.yaml" ||
+    base === "pnpm-workspace.yml" ||
+    base === ".env" ||
+    base.startsWith(".env.")
+  );
+}
+
+function isCodeFile(fileLabel: string): boolean {
+  return /\.(?:js|mjs|cjs|ts|tsx|jsx|py|sh|bash|ps1|cmd|bat|rb|php|pl|go|rs)$/i.test(fileLabel);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function scanDshSpecific(fileLabel: string, text: string, source: "static" = "static"): Finding[] {
+  const findings: Finding[] = [];
+  const lowerFile = fileLabel.toLowerCase();
+
+  // R010: cordis.patch.yml plugin tree injection
+  if (/cordis\.patch\.ya?ml$/i.test(lowerFile) || basename(lowerFile) === "cordis.patch.yml") {
+    const hasInsert = /(?:^|\n)\s*- insert:/m.test(text);
+    const dangerousNames = [
+      "@deepseek-ai/dsh-mcp-client",
+      "@deepseek-ai/cordis-plugin-group",
+      "@deepseek-ai/cordis-plugin-include",
+      "@deepseek-ai/cordis-plugin-loader",
+    ];
+    const dangerousNameHit = dangerousNames.find((name) => text.includes(name));
+    if (hasInsert && dangerousNameHit) {
+      findings.push(
+        buildDshFinding(
+          DSH_SPECIFIC_RULES[0],
+          `${fileLabel}: contains '- insert:' of ${dangerousNameHit}`,
+          source,
+        ),
+      );
+    }
+
+    const securityRowIds = [
+      "tool-bash",
+      "tool-pwsh",
+      "tool-shell",
+      "session-telemetry-otel",
+      "llm-deepseek",
+      "approval",
+      "permission",
+      "skill-badge",
+      "directory-picker",
+      "agent-instructions",
+    ];
+    for (const id of securityRowIds) {
+      const disableRe = new RegExp(
+        `id:\\s*['"]?${escapeRegExp(id)}['"]?[\\s\\S]{0,200}?disabled:\\s*true`,
+        "i",
+      );
+      const disableRe2 = new RegExp(
+        `${escapeRegExp(id)}[\\s\\S]{0,80}?disabled:\\s*true`,
+        "i",
+      );
+      if (disableRe.test(text) || disableRe2.test(text)) {
+        findings.push(
+          buildDshFinding(
+            DSH_SPECIFIC_RULES[0],
+            `${fileLabel}: disables security row '${id}'`,
+            source,
+          ),
+        );
+      }
+    }
+  }
+
+  // R011: client.mjs / browser-side malicious code
+  if (isClientFile(fileLabel)) {
+    const clientPatterns: Array<{ re: RegExp; desc: string }> = [
+      { re: /navigator\.sendBeacon\s*\(|sendBeacon\s*\(/, desc: "sendBeacon exfiltration" },
+      {
+        re: /new\s+WebSocket\s*\(\s*["'](?!wss?:\/\/)(?!ws:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0))/i,
+        desc: "WebSocket to non-local endpoint",
+      },
+      {
+        re: /addEventListener\s*\(\s*["'](?:keydown|keypress|input|change|paste)["']/i,
+        desc: "input/key logging listener",
+      },
+      { re: /navigator\.clipboard|clipboardData|readText\s*\(/, desc: "clipboard read" },
+      {
+        re: /document\.write\s*\(|innerHTML\s*=|outerHTML\s*=|insertAdjacentHTML\s*\(/,
+        desc: "DOM injection",
+      },
+      { re: /postMessage\s*\(\s*[^,]+,\s*["']\*["']/, desc: "postMessage to *" },
+      {
+        re: /atob\s*\(|String\.fromCharCode|eval\s*\(|new\s+Function\s*\(/,
+        desc: "obfuscated/eval client code",
+      },
+      {
+        re: /fetch\s*\(\s*["']https?:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|(?:[a-z0-9-]+\.)*(?:local|example)(?:\/|:|\s|["']|$))/i,
+        desc: "external fetch from client code",
+      },
+    ];
+    for (const p of clientPatterns) {
+      const m = p.re.exec(text);
+      if (m) {
+        findings.push(
+          buildDshFinding(
+            DSH_SPECIFIC_RULES[1],
+            `${fileLabel}: ${p.desc} (${m[0].slice(0, 120)})`,
+            source,
+          ),
+        );
+      }
+    }
+  }
+
+  // R012: profile configuration tampering
+  if (isProfileConfigFile(fileLabel) || (isCodeFile(fileLabel) && /(?:\.dsh|profiles|cordis\.patch\.ya?ml)/i.test(text))) {
+    const tamperPatterns: Array<{ re: RegExp; desc: string }> = [
+      {
+        re: /disabled\s*:\s*true[\s\S]{0,150}?(?:tool-bash|tool-pwsh|approval|permission|session-telemetry-otel|llm-deepseek)/i,
+        desc: "disables a DSH security row",
+      },
+      {
+        re: /(?:tool-bash|tool-pwsh|approval|permission|session-telemetry-otel|llm-deepseek)[\s\S]{0,150}?disabled\s*:\s*true/i,
+        desc: "disables a DSH security row",
+      },
+      {
+        re: /["']bundles["'][\s\S]{0,120}?["'](?:evil|malicious|hack|backdoor|exfil|miner|keylog)[^"']*["']|dsh\.profile\.bundles[\s\S]{0,200}?["'](?:evil|malicious|hack|backdoor|exfil|miner|keylog)[^"']*["']/i,
+        desc: "adds a suspicious DSH bundle",
+      },
+      {
+        re: /(?:writeFile|appendFile|copyFile|rename|mkdir|exec|spawn|chmod)[^\n]{0,100}(?:\.dsh|profiles|cordis\.patch\.ya?ml)/i,
+        desc: "writes/executes against DSH profile",
+      },
+      {
+        re: /(?:\.dsh|profiles|cordis\.patch\.ya?ml)[^\n]{0,100}(?:writeFile|appendFile|copyFile|rename|mkdir|exec|spawn|chmod)/i,
+        desc: "writes/executes against DSH profile",
+      },
+    ];
+    for (const p of tamperPatterns) {
+      if (p.re.test(text)) {
+        findings.push(
+          buildDshFinding(
+            DSH_SPECIFIC_RULES[2],
+            `${fileLabel}: ${p.desc}`,
+            source,
+          ),
+        );
+      }
     }
   }
 

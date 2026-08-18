@@ -157,8 +157,17 @@ dshscan OpenViking --output report.json --pretty
 | R007 | medium | 远程包安装源 |
 | R008 | critical | README 提示注入 |
 | R009 | medium/high | package.json 生命周期脚本 |
+| R010 | high | DSH：cordis.patch.yml 插件树注入（insert 危险 loader / 禁用安全行） |
+| R011 | high | DSH：client.mjs 浏览器侧恶意代码（sendBeacon、键盘记录、DOM 注入、外连） |
+| R012 | critical | DSH：profile 配置篡改（禁用安全行、添加可疑 bundle、写/执行 profile 文件） |
 | M001–M004 | low/medium | 索引元数据风险信号 |
 | E001–E005 | medium/high | 扫描限制/输入错误 |
+
+### DSH 特有攻击面
+
+- **R010 cordis.patch.yml 插件树注入**：插件自带的 `cordis.patch.yml` 如果 `insert` 了 `@deepseek-ai/dsh-mcp-client`、`cordis-plugin-group` 等 loader 行，或把 `tool-bash`、`approval`、`permission` 等安全行 `disabled: true`，属于高风险插件树篡改。
+- **R011 client.mjs 浏览器侧恶意代码**：DSH 插件可以注入 Web 客户端代码；检测 `sendBeacon` 外传、键盘/输入监听、剪贴板读取、`innerHTML` 注入、`postMessage *`、外连 WebSocket/fetch 等浏览器侧恶意行为。
+- **R012 profile 配置篡改**：插件如果试图修改 `cordis.yml` / `cordis.patch.yml` / `package.json` 的 `dsh.profile.bundles` / `pnpm-workspace.yaml`，或通过代码写/执行 `~/.dsh`、profiles、patch 文件，属于严重供应链风险。
 
 ## 测试
 
