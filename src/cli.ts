@@ -1,7 +1,9 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { parseArgs } from "node:util";
 import { loadIndex, resolveTarget, scanTarget, type ScanOptions } from "./scanner.js";
-import type { PluginMeta, ScanReport } from "./types.js";
+import { RULES } from "./rules.js";
+import type { PluginMeta, ScanReport, Severity } from "./types.js";
 import { VERSION } from "./version.js";
 
 const USAGE = `DShScan - DSH plugin security scanner (SkillSpector-style)
@@ -24,6 +26,10 @@ Options:
       --limit <number>     Max plugins to scan in batch mode (default 50)
       --all                Scan all plugins in batch mode
       --online             Allow cloning remote repos in batch mode
+      --audit              Run npm audit on scanned package dependencies
+      --rules <file>       Load additional JSON rules (id,severity,category,title,pattern,recommendation)
+      --serve              Start a local web dashboard
+      --port <number>      Port for --serve (default 8787)
   -h, --help               Show this help
       --version            Show version
 `;
@@ -107,6 +113,112 @@ table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8p
 </html>`;
 }
 
+function loadCustomRules(file: string): void {
+  const data = JSON.parse(readFileSync(file, "utf-8")) as Array<Record<string, unknown>>;
+  if (!Array.isArray(data)) throw new Error("rules file must be a JSON array");
+  for (const item of data) {
+    if (
+      typeof item.id !== "string" ||
+      typeof item.pattern !== "string" ||
+      typeof item.title !== "string"
+    ) {
+      throw new Error("each custom rule needs id, pattern, title");
+    }
+    const severity = String(item.severity ?? "medium") as Severity;
+    RULES.push({
+      id: item.id,
+      severity,
+      category: String(item.category ?? "custom"),
+      title: item.title,
+      pattern: new RegExp(String(item.pattern), "i"),
+      recommendation: String(item.recommendation ?? ""),
+    });
+  }
+}
+
+async function serveDashboard(plugins: PluginMeta[], port: number, values: {
+  index?: string;
+  offline?: boolean;
+  semantic?: boolean;
+  audit?: boolean;
+  "llm-model"?: string;
+  "llm-base-url"?: string;
+  "llm-api-key"?: string;
+}): Promise<number> {
+  const html = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DShScan Web Dashboard</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px}
+input,button{font-size:16px;padding:8px;margin:4px 0}
+pre{background:#f4f4f4;padding:12px;border-radius:8px;overflow:auto}
+</style>
+</head>
+<body>
+<h1>DShScan Web Dashboard</h1>
+<input id="target" placeholder="plugin-name / github:owner/repo / path" style="width:70%">
+<button onclick="scan()">Scan</button>
+<label><input id="offline" type="checkbox"> offline</label>
+<label><input id="semantic" type="checkbox"> semantic</label>
+<label><input id="audit" type="checkbox"> audit</label>
+<pre id="out">Waiting...</pre>
+<script>
+async function scan(){
+  const target=document.getElementById('target').value;
+  const offline=document.getElementById('offline').checked;
+  const semantic=document.getElementById('semantic').checked;
+  const audit=document.getElementById('audit').checked;
+  const out=document.getElementById('out');
+  out.textContent='Scanning...';
+  const res=await fetch('/api/scan?target='+encodeURIComponent(target)+'&offline='+offline+'&semantic='+semantic+'&audit='+audit);
+  out.textContent=await res.text();
+}
+</script>
+</body>
+</html>`;
+
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname === "/" || url.pathname === "/index.html") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(html);
+      return;
+    }
+    if (url.pathname === "/api/scan") {
+      const target = url.searchParams.get("target") ?? "";
+      const offline = url.searchParams.get("offline") === "true";
+      const semantic = url.searchParams.get("semantic") === "true";
+      const audit = url.searchParams.get("audit") === "true";
+      try {
+        const t = resolveTarget(target, plugins, offline);
+        const report = await scanTarget(t, {
+          indexPath: values.index,
+          offline,
+          semantic,
+          audit,
+          llmModel: values["llm-model"],
+          llmBaseUrl: values["llm-base-url"],
+          llmApiKey: values["llm-api-key"],
+        });
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify(report, null, 2));
+      } catch (err) {
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+        res.end(String(err instanceof Error ? err.message : err));
+      }
+      return;
+    }
+    res.writeHead(404, { "content-type": "text/plain" });
+    res.end("Not found");
+  });
+
+  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
+  console.error(`DShScan dashboard: http://127.0.0.1:${port}`);
+  return new Promise<number>(() => {});
+}
+
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   let values: {
     index?: string;
@@ -119,6 +231,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     pretty?: boolean;
     summary?: boolean;
     html?: boolean;
+    audit?: boolean;
+    rules?: string;
+    serve?: boolean;
+    port?: string;
     batch?: boolean;
     limit?: string;
     all?: boolean;
@@ -141,6 +257,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         pretty: { type: "boolean", short: "p" },
         summary: { type: "boolean" },
         html: { type: "boolean" },
+        audit: { type: "boolean" },
+        rules: { type: "string" },
+        serve: { type: "boolean" },
+        port: { type: "string" },
         batch: { type: "boolean" },
         limit: { type: "string" },
         all: { type: "boolean" },
@@ -182,6 +302,23 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     );
   }
 
+  if (values.rules) {
+    try {
+      loadCustomRules(values.rules);
+    } catch (err) {
+      console.error(`dshscan: failed to load custom rules: ${err instanceof Error ? err.message : String(err)}`);
+      return 2;
+    }
+  }
+
+  if (values.serve) {
+    return await serveDashboard(
+      plugins,
+      Number(values.port ?? 8787) || 8787,
+      values,
+    );
+  }
+
   if (values.batch) {
     const limit = values.all
       ? plugins.length
@@ -199,6 +336,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           indexPath: values.index,
           offline,
           semantic: values.semantic ?? false,
+          audit: values.audit ?? false,
           llmModel: values["llm-model"],
           llmBaseUrl: values["llm-base-url"],
           llmApiKey: values["llm-api-key"],
@@ -275,6 +413,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     indexPath: values.index,
     offline: values.offline ?? false,
     semantic: values.semantic ?? false,
+    audit: values.audit ?? false,
     llmModel: values["llm-model"],
     llmBaseUrl: values["llm-base-url"],
     llmApiKey: values["llm-api-key"],

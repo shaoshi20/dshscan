@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
@@ -100,6 +100,7 @@ export interface ScanOptions {
   indexPath?: string;
   offline?: boolean;
   semantic?: boolean;
+  audit?: boolean;
   llmModel?: string;
   llmBaseUrl?: string;
   llmApiKey?: string;
@@ -163,6 +164,40 @@ export function cloneRepo(url: string, dest: string): void {
   });
 }
 
+export function runNpmAudit(dir: string): Finding[] {
+  const findings: Finding[] = [];
+  const result = spawnSync("npm", ["audit", "--json", "--omit=dev"], {
+    cwd: dir,
+    encoding: "utf-8",
+    timeout: 120_000,
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  const stdout = String(result.stdout || "");
+  let data: { vulnerabilities?: Record<string, { severity?: string; range?: string; isDirect?: boolean }> };
+  try {
+    data = JSON.parse(stdout) as typeof data;
+  } catch {
+    return findings;
+  }
+  const vulns = data.vulnerabilities ?? {};
+  for (const [name, info] of Object.entries(vulns)) {
+    const sev = String(info.severity ?? "medium");
+    const severity: Severity =
+      sev === "critical" ? "critical" : sev === "high" ? "high" : sev === "moderate" ? "medium" : "low";
+    findings.push({
+      id: `AUDIT-${name}`,
+      severity,
+      category: "dependency-vulnerability",
+      title: `npm audit: ${name}`,
+      evidence: `${name}${info.range ? `@${info.range}` : ""}${info.isDirect ? " (direct)" : " (transitive)"}`,
+      recommendation: `Update ${name} to a non-vulnerable version and re-run npm audit.`,
+      source: "static",
+      rule: "AUDIT",
+    });
+  }
+  return findings;
+}
+
 export function scanNpmPackage(packageName: string): RawScanResult | null {
   const tmp = mkdtempSync(join(tmpdir(), "dshscan-npm-"));
   try {
@@ -180,7 +215,9 @@ export function scanNpmPackage(packageName: string): RawScanResult | null {
       timeout: 120_000,
       maxBuffer: 10 * 1024 * 1024,
     });
-    return scanLocalPath(extract);
+    const raw = scanLocalPath(extract);
+    raw.findings.push(...runNpmAudit(extract));
+    return raw;
   } catch {
     return null;
   } finally {
@@ -1111,6 +1148,7 @@ export async function scanTarget(target: TargetInfo, opts: ScanOptions = {}): Pr
     } else {
       const raw = scanLocalPath(target.localPath);
       findings.push(...raw.findings);
+      if (opts.audit) findings.push(...runNpmAudit(target.localPath));
       readmeText = raw.readmeText;
       codeExcerpts = raw.codeExcerpts;
     }
@@ -1136,6 +1174,7 @@ export async function scanTarget(target: TargetInfo, opts: ScanOptions = {}): Pr
           cloneRepo(target.repoUrl, tmp);
           const raw = scanLocalPath(tmp);
           findings.push(...raw.findings);
+          if (opts.audit) findings.push(...runNpmAudit(tmp));
           readmeText = raw.readmeText;
           codeExcerpts = raw.codeExcerpts;
         } catch (err) {
