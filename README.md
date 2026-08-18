@@ -26,6 +26,17 @@ npm run build
 
 构建后生成 `dist/main.js`，可通过 `dshscan.cmd` 或 `node dist/main.js` 调用。
 
+## npm 发布
+
+- 已配置 `publishConfig.registry = https://registry.npmjs.org` 和 `access = public`。
+- 手动发布：
+  ```bash
+  npm login
+  npm publish
+  ```
+- 自动发布：每次创建 GitHub Release 时，`.github/workflows/npm-publish.yml` 会自动执行 `npm test` + `npm publish`。
+- 自动发布需要在 GitHub 仓库配置 `NPM_TOKEN` Secret（npm Access Token，权限 `read and publish`）。
+
 ## 使用
 
 ```bash

@@ -1,16 +1,26 @@
 {
   "name": "dshscan",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DShScan - DSH plugin security scanner inspired by NVIDIA SkillSpector",
   "type": "module",
   "bin": {
     "dshscan": "dist/main.js"
   },
+  "main": "dist/main.js",
+  "files": [
+    "dist/",
+    "src/",
+    "README.md",
+    "LICENSE",
+    "dshscan",
+    "dshscan.cmd"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/main.ts",
     "scan": "tsx src/main.ts",
-    "test": "npm run build && node --test"
+    "test": "npm run build && node --test",
+    "prepublishOnly": "npm test"
   },
   "keywords": [
     "dsh",
@@ -18,9 +28,23 @@
     "scanner",
     "plugin",
     "skillspectator",
-    "supply-chain"
+    "supply-chain",
+    "ai-security"
   ],
   "license": "MIT",
+  "author": "shaoshi20",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shaoshi20/dshscan.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shaoshi20/dshscan/issues"
+  },
+  "homepage": "https://github.com/shaoshi20/dshscan#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "dependencies": {
     "adm-zip": "^0.5.16"
   },
