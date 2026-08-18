@@ -34,6 +34,21 @@ export function apply(ctx, config = {}) {
         description:
           "Enable LLM semantic scan. Requires DSCAN_LLM_API_KEY or OPENAI_API_KEY.",
       },
+      index: {
+        type: "string",
+        description:
+          "Optional path to dshbase-directory.json. Defaults to plugin config or DSCAN_INDEX.",
+      },
+      llmModel: {
+        type: "string",
+        description:
+          "Optional LLM model name for semantic scan. Defaults to DSCAN_LLM_MODEL.",
+      },
+      llmBaseUrl: {
+        type: "string",
+        description:
+          "Optional OpenAI-compatible base URL for semantic scan. Defaults to DSCAN_LLM_BASE_URL.",
+      },
     },
     output: {
       schema: { type: "string" },
@@ -41,7 +56,11 @@ export function apply(ctx, config = {}) {
     },
     async execute(args) {
       const indexPath =
-        typeof config.index === "string" && config.index ? config.index : undefined;
+        typeof args.index === "string" && args.index
+          ? args.index
+          : typeof config.index === "string" && config.index
+            ? config.index
+            : undefined;
 
       let plugins = [];
       try {
@@ -55,6 +74,8 @@ export function apply(ctx, config = {}) {
         indexPath,
         offline: args.offline === true,
         semantic: args.semantic === true,
+        llmModel: typeof args.llmModel === "string" ? args.llmModel : undefined,
+        llmBaseUrl: typeof args.llmBaseUrl === "string" ? args.llmBaseUrl : undefined,
       });
 
       return JSON.stringify(report, null, 2);

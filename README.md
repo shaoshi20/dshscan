@@ -15,6 +15,7 @@ DSH 插件安全审查器（DShScan），模仿 NVIDIA SkillSpector 机制，为
   - 可选 LLM 语义扫描（需 API Key）
 - **dshbase 集成**：输入插件名时自动读取本地索引元数据（stars / trust / verified / npm / cmd）
 - **误报处理**：每条 finding 都带证据 + 修复建议
+- **批量扫描**：支持对 dshbase 插件目录批量扫描并输出汇总 JSON
 
 ## 安装与构建
 
@@ -53,6 +54,12 @@ dshscan <plugin-name> --semantic --llm-base-url https://api.openai.com/v1 --llm-
 
 # 输出到文件
 dshscan <plugin-name> --output report.json --pretty
+
+# 批量扫描 dshbase 插件（默认离线，按 stars 取前 N）
+dshscan --batch --limit 50 --index /path/to/dshbase-directory.json --output batch.json --pretty
+
+# 批量扫描全部插件（离线）
+dshscan --batch --all --offline --output all.json
 ```
 
 ## 环境变量

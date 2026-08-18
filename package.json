@@ -62,7 +62,8 @@
     "@deepseek-ai/dsh-tools": "0.1.0-rc.6"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16"
+    "adm-zip": "^0.5.16",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-tools": "0.1.0-rc.6",

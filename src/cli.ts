@@ -18,6 +18,10 @@ Options:
       --llm-api-key <key>  Override LLM API key (default: DSCAN_LLM_API_KEY or OPENAI_API_KEY)
   -o, --output <file>      Write JSON report to file instead of stdout
   -p, --pretty             Pretty-print JSON output
+      --batch              Batch scan dshbase plugins (default offline)
+      --limit <number>     Max plugins to scan in batch mode (default 50)
+      --all                Scan all plugins in batch mode
+      --online             Allow cloning remote repos in batch mode
   -h, --help               Show this help
       --version            Show version
 `;
@@ -32,6 +36,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     "llm-api-key"?: string;
     output?: string;
     pretty?: boolean;
+    batch?: boolean;
+    limit?: string;
+    all?: boolean;
+    online?: boolean;
     help?: boolean;
     version?: boolean;
   };
@@ -48,6 +56,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         "llm-api-key": { type: "string" },
         output: { type: "string", short: "o" },
         pretty: { type: "boolean", short: "p" },
+        batch: { type: "boolean" },
+        limit: { type: "string" },
+        all: { type: "boolean" },
+        online: { type: "boolean" },
         help: { type: "boolean", short: "h" },
         version: { type: "boolean" },
       },
@@ -69,12 +81,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     console.log(`DShScan ${VERSION}`);
     return 0;
   }
-  if (positionals.length === 0) {
+  if (!values.batch && positionals.length === 0) {
     console.error(USAGE);
     return 2;
   }
 
-  const targetRaw = positionals[0];
+  const targetRaw = positionals[0] ?? "";
   // 索引缺失/损坏不应让整个扫描崩溃：降级为无元数据通道并提示。
   let plugins: PluginMeta[] = [];
   try {
@@ -84,6 +96,66 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       `dshscan: warning: cannot read plugin index (${err instanceof Error ? err.message : String(err)}); metadata channel disabled`,
     );
   }
+
+  if (values.batch) {
+    const limit = values.all
+      ? plugins.length
+      : Math.max(1, Math.min(Number(values.limit ?? 50) || 50, plugins.length));
+    const selected = values.all
+      ? plugins
+      : [...plugins].sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0)).slice(0, limit);
+    const offline = !(values.online ?? false);
+    const results: Array<Record<string, unknown>> = [];
+
+    for (const meta of selected) {
+      try {
+        const t = resolveTarget(meta.name, plugins, offline);
+        const r = await scanTarget(t, {
+          indexPath: values.index,
+          offline,
+          semantic: values.semantic ?? false,
+          llmModel: values["llm-model"],
+          llmBaseUrl: values["llm-base-url"],
+          llmApiKey: values["llm-api-key"],
+        });
+        results.push({
+          name: meta.name,
+          stars: meta.stars ?? 0,
+          trust: meta.trust ?? "",
+          verified: meta.verified ?? false,
+          risk_score: r.risk_score,
+          severity: r.severity,
+          safe_to_install: r.safe_to_install,
+          findings: r.findings.length,
+          scan_mode: r.scan_mode,
+        });
+      } catch (err) {
+        results.push({
+          name: meta.name,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const batchReport = {
+      tool: "DShScan",
+      version: VERSION,
+      mode: "batch",
+      generatedAt: new Date().toISOString(),
+      offline,
+      scanned: results.length,
+      results,
+    };
+    const json = JSON.stringify(batchReport, null, values.pretty ? 2 : 0);
+    if (values.output) {
+      writeFileSync(values.output, json, "utf-8");
+      console.error(`Batch report written to ${values.output}`);
+    } else {
+      console.log(json);
+    }
+    return 0;
+  }
+
   const target = resolveTarget(targetRaw, plugins, values.offline ?? false);
 
   const opts: ScanOptions = {
