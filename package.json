@@ -1,6 +1,6 @@
 {
   "name": "@shaoshi/dshscan",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "DShScan - DSH plugin security scanner inspired by NVIDIA SkillSpector",
   "type": "module",
   "bin": {
