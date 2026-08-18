@@ -18,6 +18,7 @@ Options:
       --llm-api-key <key>  Override LLM API key (default: DSCAN_LLM_API_KEY or OPENAI_API_KEY)
   -o, --output <file>      Write JSON report to file instead of stdout
   -p, --pretty             Pretty-print JSON output
+      --summary            Print a human-readable summary instead of JSON
       --batch              Batch scan dshbase plugins (default offline)
       --limit <number>     Max plugins to scan in batch mode (default 50)
       --all                Scan all plugins in batch mode
@@ -36,6 +37,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     "llm-api-key"?: string;
     output?: string;
     pretty?: boolean;
+    summary?: boolean;
     batch?: boolean;
     limit?: string;
     all?: boolean;
@@ -56,6 +58,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         "llm-api-key": { type: "string" },
         output: { type: "string", short: "o" },
         pretty: { type: "boolean", short: "p" },
+        summary: { type: "boolean" },
         batch: { type: "boolean" },
         limit: { type: "string" },
         all: { type: "boolean" },
@@ -146,12 +149,32 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       scanned: results.length,
       results,
     };
-    const json = JSON.stringify(batchReport, null, values.pretty ? 2 : 0);
-    if (values.output) {
-      writeFileSync(values.output, json, "utf-8");
-      console.error(`Batch report written to ${values.output}`);
+    if (values.summary) {
+      const lines = [
+        `DShScan ${VERSION} — batch scan`,
+        `Scanned: ${results.length}`,
+        `Offline: ${offline}`,
+        "",
+        ...results.map((r) => {
+          const rec = r as Record<string, unknown>;
+          if (rec.error) return `${rec.name}: ERROR ${rec.error}`;
+          return `${rec.name}: risk=${rec.risk_score} severity=${rec.severity} safe=${rec.safe_to_install} findings=${rec.findings} (${rec.scan_mode})`;
+        }),
+      ];
+      if (values.output) {
+        writeFileSync(values.output, lines.join("\n"), "utf-8");
+        console.error(`Batch summary written to ${values.output}`);
+      } else {
+        console.log(lines.join("\n"));
+      }
     } else {
-      console.log(json);
+      const json = JSON.stringify(batchReport, null, values.pretty ? 2 : 0);
+      if (values.output) {
+        writeFileSync(values.output, json, "utf-8");
+        console.error(`Batch report written to ${values.output}`);
+      } else {
+        console.log(json);
+      }
     }
     return 0;
   }
@@ -175,15 +198,39 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     return 1;
   }
 
-  const json = JSON.stringify(report, null, values.pretty ? 2 : 0);
-  if (values.output) {
-    writeFileSync(values.output, json, "utf-8");
-    console.error(`Report written to ${values.output}`);
-    console.error(
-      `Summary: risk_score=${report.risk_score} severity=${report.severity} safe_to_install=${report.safe_to_install} findings=${report.findings.length}`,
-    );
+  if (values.summary) {
+    const lines = [
+      `DShScan ${VERSION}`,
+      `Target: ${report.target.displayName}`,
+      `Risk score: ${report.risk_score}`,
+      `Severity: ${report.severity}`,
+      `Safe to install: ${report.safe_to_install}`,
+      `Scan mode: ${report.scan_mode}`,
+      `Findings: ${report.findings.length}`,
+      "",
+      ...report.findings.slice(0, 20).map(
+        (f) => `- [${f.severity}] ${f.id} ${f.title}\n  ${f.evidence}`,
+      ),
+      "",
+      `Recommendation: ${report.recommendation}`,
+    ];
+    if (values.output) {
+      writeFileSync(values.output, lines.join("\n"), "utf-8");
+      console.error(`Summary written to ${values.output}`);
+    } else {
+      console.log(lines.join("\n"));
+    }
   } else {
-    console.log(json);
+    const json = JSON.stringify(report, null, values.pretty ? 2 : 0);
+    if (values.output) {
+      writeFileSync(values.output, json, "utf-8");
+      console.error(`Report written to ${values.output}`);
+      console.error(
+        `Summary: risk_score=${report.risk_score} severity=${report.severity} safe_to_install=${report.safe_to_install} findings=${report.findings.length}`,
+      );
+    } else {
+      console.log(json);
+    }
   }
 
   return 0;

@@ -70,6 +70,9 @@ dshscan <plugin-name> --semantic --llm-base-url https://api.openai.com/v1 --llm-
 # 输出到文件
 dshscan <plugin-name> --output report.json --pretty
 
+# 输出人类可读摘要
+dshscan <plugin-name> --summary
+
 # 批量扫描 dshbase 插件（默认离线，按 stars 取前 N）
 dshscan --batch --limit 50 --index /path/to/dshbase-directory.json --output batch.json --pretty
 
