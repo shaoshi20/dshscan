@@ -40,7 +40,7 @@ npm run build
   npm publish
   ```
 - 自动发布：每次创建 GitHub Release 时，`.github/workflows/npm-publish.yml` 会自动执行 `npm test` + `npm publish`。
-- 自动发布需要在 GitHub 仓库配置 `NPM_TOKEN` Secret（npm Access Token，权限 `read and publish`）。
+- 自动发布使用 npm **Trusted Publishing（OIDC）**，无需长期 NPM_TOKEN；已在 npm 后台为 `@shaoshi/dshscan` 配置 GitHub Actions 信任关系。
 
 ## 使用
 
