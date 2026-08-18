@@ -30,8 +30,12 @@ dsh plugin add @shaoshi/dshscan
   - 可选 LLM 语义扫描（需 API Key）
 - **dshbase 集成**：输入插件名时自动读取本地索引元数据（stars / trust / verified / npm / cmd）
 - **npm 源码扫描**：npm 插件可自动 `npm pack` 下载并扫描包内容
+- **依赖审计**：检查未锁定版本、远程依赖源、依赖包名仿冒
+- **DSH manifest 校验**：检查 `dsh.bundle`、`cordis.patch.yml`、LICENSE、README
+- **HTML 报告**：支持 `--html` 输出独立网页报告
 - **误报处理**：每条 finding 都带证据 + 修复建议
-- **批量扫描**：支持对 dshbase 插件目录批量扫描并输出汇总 JSON
+- **批量扫描**：支持对 dshbase 插件目录批量扫描并输出汇总 JSON / HTML
+- **定时巡检**：GitHub Actions 每日自动拉取 dshbase 目录并批量扫描
 
 ## 安装与构建
 
@@ -73,6 +77,12 @@ dshscan <plugin-name> --output report.json --pretty
 
 # 输出人类可读摘要
 dshscan <plugin-name> --summary
+
+# 输出 HTML 报告
+dshscan <plugin-name> --html --output report.html
+
+# 批量扫描输出 HTML
+dshscan --batch --all --html --output batch.html
 
 # 批量扫描 dshbase 插件（默认离线，按 stars 取前 N）
 dshscan --batch --limit 50 --index /path/to/dshbase-directory.json --output batch.json --pretty

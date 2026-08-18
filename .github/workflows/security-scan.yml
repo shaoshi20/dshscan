@@ -1,0 +1,40 @@
+name: security-scan
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  batch-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Fetch dshbase plugin directory
+        run: node scripts/parse-dshbase-directory.mjs
+
+      - name: Run DShScan batch scan (offline)
+        run: |
+          mkdir -p reports
+          node dist/main.js --batch --all --offline \
+            --index scripts/dshbase-directory.json \
+            --output reports/dshbase-batch.json \
+            --summary
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dshbase-batch-report
+          path: reports/
+          retention-days: 30

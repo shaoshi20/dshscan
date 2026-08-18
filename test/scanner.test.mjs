@@ -223,3 +223,26 @@ test("M005 flags possible typosquatting", () => {
   const f = metadataFindings({ name: "dsh-browzer", verified: true, stars: 100, trust: "silver" });
   assert.ok(f.some((x) => x.id === "M005" && x.severity === "high"));
 });
+
+test("D001 flags unpinned dependency", () => {
+  const pkg = JSON.stringify({ dependencies: { lodash: "*" } });
+  const f = scanText(pkg, "package.json");
+  assert.ok(f.some((x) => x.id === "D001" && x.severity === "medium"));
+});
+
+test("D002 flags dependency typosquatting", () => {
+  const pkg = JSON.stringify({ dependencies: { lodahs: "1.0.0" } });
+  const f = scanText(pkg, "package.json");
+  assert.ok(f.some((x) => x.id === "D002" && x.severity === "high"));
+});
+
+test("D003 flags remote dependency source", () => {
+  const pkg = JSON.stringify({ dependencies: { evil: "https://evil.example/x.tgz" } });
+  const f = scanText(pkg, "package.json");
+  assert.ok(f.some((x) => x.id === "D003" && x.severity === "high"));
+});
+
+test("DSH manifest validation flags missing dsh.bundle", () => {
+  const raw = scanLocalPath("test-fixtures/dsh-malicious");
+  assert.ok(raw.findings.some((x) => x.id === "M006"));
+});

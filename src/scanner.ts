@@ -294,6 +294,7 @@ export function scanText(text: string, fileLabel: string, source: "static" = "st
           });
         }
       }
+      findings.push(...scanPackageDependencies(fileLabel, text, source));
     } catch {
       // ignore malformed package.json; other rules may still flag it
     }
@@ -306,6 +307,86 @@ export function scanText(text: string, fileLabel: string, source: "static" = "st
       f.severity = downgradeSeverity(f.severity);
     }
     findings.push(f);
+  }
+
+  return findings;
+}
+
+function scanDshManifest(root: string, source: "static" = "static"): Finding[] {
+  const findings: Finding[] = [];
+  const pkgPath = join(root, "package.json");
+  if (!existsSync(pkgPath)) return findings;
+
+  let pkg: { dsh?: { bundle?: { patch?: unknown } }; name?: string } | null = null;
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as {
+      dsh?: { bundle?: { patch?: unknown } };
+      name?: string;
+    };
+  } catch {
+    return findings;
+  }
+
+  const patchPath = join(root, "cordis.patch.yml");
+  const isDshCandidate =
+    Boolean(pkg?.dsh) || existsSync(patchPath) || /dsh/i.test(String(pkg?.name ?? ""));
+
+  if (!isDshCandidate) return findings;
+
+  const files = readdirSync(root).map((f) => f.toLowerCase());
+  const hasLicense = files.some((f) => /^license(?:\..*)?$/.test(f));
+  const hasReadme = files.some((f) => /^readme(?:\..*)?$/.test(f));
+
+  if (!pkg?.dsh?.bundle) {
+    findings.push({
+      id: "M006",
+      severity: "medium",
+      category: "dsh-manifest",
+      title: "Missing dsh.bundle manifest",
+      evidence: "package.json: dsh.bundle is missing",
+      recommendation:
+        "Add dsh.bundle.patch pointing to cordis.patch.yml so DSH can mount this plugin.",
+      source,
+      rule: "M006",
+    });
+  }
+  if (pkg?.dsh?.bundle && !existsSync(patchPath)) {
+    findings.push({
+      id: "M007",
+      severity: "high",
+      category: "dsh-manifest",
+      title: "cordis.patch.yml missing",
+      evidence: "dsh.bundle.patch references cordis.patch.yml but file is absent",
+      recommendation:
+        "Create cordis.patch.yml with the plugin loader insertion rows.",
+      source,
+      rule: "M007",
+    });
+  }
+  if (!hasLicense) {
+    findings.push({
+      id: "M008",
+      severity: "medium",
+      category: "dsh-manifest",
+      title: "Missing LICENSE file",
+      evidence: "LICENSE not found",
+      recommendation:
+        "Add an open-source license so users know the terms before installing.",
+      source,
+      rule: "M008",
+    });
+  }
+  if (!hasReadme) {
+    findings.push({
+      id: "M009",
+      severity: "low",
+      category: "dsh-manifest",
+      title: "Missing README",
+      evidence: "README not found",
+      recommendation: "Add a README describing what the plugin does and how to configure it.",
+      source,
+      rule: "M009",
+    });
   }
 
   return findings;
@@ -402,6 +483,90 @@ function levenshtein(a: string, b: string): number {
     }
   }
   return dp[n];
+}
+
+const COMMON_DEPENDENCY_NAMES = [
+  "lodash",
+  "express",
+  "react",
+  "axios",
+  "request",
+  "chalk",
+  "commander",
+  "typescript",
+  "webpack",
+  "node-fetch",
+  "yaml",
+  "adm-zip",
+];
+
+function scanPackageDependencies(
+  fileLabel: string,
+  text: string,
+  source: "static" = "static",
+): Finding[] {
+  const findings: Finding[] = [];
+  try {
+    const pkg = JSON.parse(text) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+    for (const [name, rawVersion] of Object.entries(deps)) {
+      const version = String(rawVersion ?? "");
+      if (/^(?:\*|latest)$/i.test(version) || /^[>=<^~]/.test(version)) {
+        findings.push({
+          id: "D001",
+          severity: "medium",
+          category: "dependency-risk",
+          title: "Unpinned dependency version",
+          evidence: `${fileLabel}: ${name}@${version}`,
+          recommendation:
+            "Pin exact versions to reduce supply-chain drift and unexpected updates.",
+          source,
+          rule: "D001",
+        });
+      }
+      if (/^(?:https?:|git\+|github:)/i.test(version)) {
+        findings.push({
+          id: "D003",
+          severity: "high",
+          category: "dependency-risk",
+          title: "Remote dependency source",
+          evidence: `${fileLabel}: ${name}@${version}`,
+          recommendation:
+            "Prefer registry dependencies with pinned versions over remote tarballs/Git URLs.",
+          source,
+          rule: "D003",
+        });
+      }
+      const bare = name.toLowerCase().replace(/^@[^/]+\//, "");
+      for (const known of COMMON_DEPENDENCY_NAMES) {
+        if (
+          bare !== known &&
+          bare.length >= 4 &&
+          known.length >= 4 &&
+          levenshtein(bare, known) <= 2
+        ) {
+          findings.push({
+            id: "D002",
+            severity: "high",
+            category: "dependency-risk",
+            title: "Possible dependency typosquatting",
+            evidence: `${fileLabel}: ${name} looks like '${known}'`,
+            recommendation:
+              "Verify the package owner; typosquatted dependencies are a common supply-chain attack.",
+            source,
+            rule: "D002",
+          });
+          break;
+        }
+      }
+    }
+  } catch {
+    // ignore malformed package.json
+  }
+  return findings;
 }
 
 function tryParseYaml(text: string): { parsed: boolean; data: unknown } {
@@ -681,6 +846,7 @@ export function scanLocalPath(localPath: string): RawScanResult {
         codeExcerpts.push(`--- ${rel} ---\n${text.slice(0, 4000)}`);
       }
     }
+    findings.push(...scanDshManifest(resolved));
   } else if (resolved.toLowerCase().endsWith(".zip")) {
     sourceLabel = resolved;
     const tmp = mkdtempSync(join(tmpdir(), "dshscan-zip-"));

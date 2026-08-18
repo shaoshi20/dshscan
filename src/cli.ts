@@ -19,6 +19,7 @@ Options:
   -o, --output <file>      Write JSON report to file instead of stdout
   -p, --pretty             Pretty-print JSON output
       --summary            Print a human-readable summary instead of JSON
+      --html               Output a standalone HTML report instead of JSON
       --batch              Batch scan dshbase plugins (default offline)
       --limit <number>     Max plugins to scan in batch mode (default 50)
       --all                Scan all plugins in batch mode
@@ -26,6 +27,85 @@ Options:
   -h, --help               Show this help
       --version            Show version
 `;
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderHtmlReport(report: ScanReport): string {
+  const findings = report.findings
+    .map(
+      (f) => `<li><strong>[${escapeHtml(f.severity)}] ${escapeHtml(f.id)}</strong> ${escapeHtml(f.title)}<br><code>${escapeHtml(f.evidence)}</code><br><small>${escapeHtml(f.recommendation)}</small></li>`,
+    )
+    .join("\n");
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DShScan Report — ${escapeHtml(report.target.displayName)}</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#222}
+h1{border-bottom:2px solid #eee;padding-bottom:10px}
+.badge{display:inline-block;padding:4px 10px;border-radius:12px;color:#fff;font-size:14px}
+.critical{background:#c00}.high{background:#e67e22}.medium{background:#f1c40f;color:#222}.low{background:#27ae60}
+ul{list-style:none;padding:0}li{background:#f8f9fa;margin:8px 0;padding:10px;border-radius:8px}
+code{background:#eee;padding:2px 4px;border-radius:4px}
+</style>
+</head>
+<body>
+<h1>DShScan Report</h1>
+<p>Target: <strong>${escapeHtml(report.target.displayName)}</strong></p>
+<p>Risk Score: <strong>${report.risk_score}</strong> <span class="badge ${escapeHtml(report.severity)}">${escapeHtml(report.severity)}</span></p>
+<p>Safe to install: <strong>${report.safe_to_install}</strong></p>
+<p>Scan mode: ${escapeHtml(report.scan_mode)}</p>
+<p>Findings: ${report.findings.length}</p>
+<h2>Findings</h2>
+<ul>${findings || "<li>No findings</li>"}</ul>
+<h2>Recommendation</h2>
+<p>${escapeHtml(report.recommendation)}</p>
+</body>
+</html>`;
+}
+
+function renderHtmlBatch(batch: {
+  version: string;
+  offline: boolean;
+  scanned: number;
+  results: Array<Record<string, unknown>>;
+}): string {
+  const rows = batch.results
+    .map((r) => {
+      if (r.error) {
+        return `<tr><td>${escapeHtml(r.name)}</td><td colspan="5">ERROR ${escapeHtml(r.error)}</td></tr>`;
+      }
+      return `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.risk_score)}</td><td>${escapeHtml(r.severity)}</td><td>${escapeHtml(r.safe_to_install)}</td><td>${escapeHtml(r.findings)}</td><td>${escapeHtml(r.scan_mode)}</td></tr>`;
+    })
+    .join("\n");
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DShScan Batch Report</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:1100px;margin:40px auto;padding:0 20px}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f4f4f4}
+</style>
+</head>
+<body>
+<h1>DShScan Batch Report</h1>
+<p>Version ${escapeHtml(batch.version)} · Scanned ${batch.scanned} · Offline ${batch.offline}</p>
+<table>
+<thead><tr><th>Plugin</th><th>Risk</th><th>Severity</th><th>Safe</th><th>Findings</th><th>Mode</th></tr></thead>
+<tbody>${rows}</tbody>
+</table>
+</body>
+</html>`;
+}
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   let values: {
@@ -38,6 +118,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     output?: string;
     pretty?: boolean;
     summary?: boolean;
+    html?: boolean;
     batch?: boolean;
     limit?: string;
     all?: boolean;
@@ -59,6 +140,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         output: { type: "string", short: "o" },
         pretty: { type: "boolean", short: "p" },
         summary: { type: "boolean" },
+        html: { type: "boolean" },
         batch: { type: "boolean" },
         limit: { type: "string" },
         all: { type: "boolean" },
@@ -149,7 +231,15 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       scanned: results.length,
       results,
     };
-    if (values.summary) {
+    if (values.html) {
+      const html = renderHtmlBatch(batchReport as Parameters<typeof renderHtmlBatch>[0]);
+      if (values.output) {
+        writeFileSync(values.output, html, "utf-8");
+        console.error(`Batch HTML report written to ${values.output}`);
+      } else {
+        console.log(html);
+      }
+    } else if (values.summary) {
       const lines = [
         `DShScan ${VERSION} — batch scan`,
         `Scanned: ${results.length}`,
@@ -198,7 +288,15 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     return 1;
   }
 
-  if (values.summary) {
+  if (values.html) {
+    const html = renderHtmlReport(report);
+    if (values.output) {
+      writeFileSync(values.output, html, "utf-8");
+      console.error(`HTML report written to ${values.output}`);
+    } else {
+      console.log(html);
+    }
+  } else if (values.summary) {
     const lines = [
       `DShScan ${VERSION}`,
       `Target: ${report.target.displayName}`,
