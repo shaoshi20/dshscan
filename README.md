@@ -28,6 +28,11 @@ npm run build
 
 ## npm 发布
 
+- npm 包名：**`@shaoshi/dshscan`**
+- 全局安装：
+  ```bash
+  npm install -g @shaoshi/dshscan
+  ```
 - 已配置 `publishConfig.registry = https://registry.npmjs.org` 和 `access = public`。
 - 手动发布：
   ```bash
