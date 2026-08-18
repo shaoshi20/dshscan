@@ -19,8 +19,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/main.ts",
     "scan": "tsx src/main.ts",
-    "test": "npm run build && node --test",
-    "prepublishOnly": "npm test"
+    "test": "tsx --test test/*.test.mjs",
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
     "dsh",

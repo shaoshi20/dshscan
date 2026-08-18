@@ -5,6 +5,7 @@ import { basename, join, relative, resolve } from "node:path";
 import AdmZip from "adm-zip";
 import { runSemantic } from "./semantic.js";
 import { buildDshFinding, buildFinding, DSH_SPECIFIC_RULES, RULES, SEVERITY_WEIGHTS } from "./rules.js";
+import { VERSION } from "./version.js";
 import type {
   Finding,
   PluginMeta,
@@ -25,7 +26,6 @@ function defaultIndexPath(): string {
 
 const DEFAULT_INDEX = defaultIndexPath();
 const TOOL_NAME = "DShScan";
-const TOOL_VERSION = "0.1.0";
 
 const SKIP_DIRS = new Set([
   ".git",
@@ -60,8 +60,11 @@ const TEXT_EXTS = new Set([
   ".ps1", ".cmd", ".bat", ".rb", ".php", ".pl", ".lua", ".go", ".rs", ".java",
   ".c", ".h", ".cpp", ".hpp", ".cs", ".swift", ".kt", ".json", ".yaml", ".yml",
   ".toml", ".ini", ".cfg", ".conf", ".md", ".markdown", ".txt", ".html", ".htm",
-  ".xml", ".sql", ".env", ".service", ".desktop", ".lock",
+  ".xml", ".sql", ".env", ".service", ".desktop",
 ]);
+
+// 单文件扫描上限：超大文件/压缩产物不逐行跑正则，避免 O(n²) 和内存问题。
+const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
 const SPECIAL_FILES = new Set([
   "Dockerfile", "Makefile", "Rakefile", "Gemfile", "Procfile", "Vagrantfile",
@@ -154,6 +157,8 @@ export function cloneRepo(url: string, dest: string): void {
   execFileSync("git", ["clone", "--depth", "1", url, dest], {
     stdio: "pipe",
     encoding: "utf-8",
+    timeout: 60_000,
+    maxBuffer: 10 * 1024 * 1024,
   });
 }
 
@@ -172,7 +177,9 @@ export function collectTextFiles(root: string): string[] {
         if (!SKIP_DIRS.has(entry.name)) walk(full);
       } else if (entry.isFile()) {
         const ext = entry.name.includes(".") ? `.${entry.name.split(".").pop()?.toLowerCase()}` : "";
-        if (TEXT_EXTS.has(ext) || SPECIAL_FILES.has(entry.name)) out.push(full);
+        if ((TEXT_EXTS.has(ext) || SPECIAL_FILES.has(entry.name)) && statSync(full).size <= MAX_FILE_SIZE) {
+          out.push(full);
+        }
       }
     }
   };
@@ -210,6 +217,26 @@ export function scanText(text: string, fileLabel: string, source: "static" = "st
           finding.severity = downgradeSeverity(finding.severity);
         }
         findings.push(finding);
+      }
+    }
+  }
+
+  // R005 cross-line detection: credential access and network sink often span
+  // multiple lines in real code. Look for a 5-line window when no line-level hit.
+  if (!findings.some((f) => f.id === "R005")) {
+    const r005 = RULES.find((r) => r.id === "R005");
+    if (r005) {
+      for (let i = 0; i < lines.length; i++) {
+        const window = lines.slice(i, i + 5).join(" ");
+        if (r005.pattern.test(window)) {
+          const evidence = `${fileLabel}:${i + 1}-${Math.min(i + 5, lines.length)}: ${window.slice(0, 300)}`;
+          const finding = buildFinding(r005, evidence, source);
+          if (TEST_RE.test(fileLabel) || DOCKER_RE.test(fileLabel) || (DOC_RE.test(fileLabel) && r005.id !== "R008")) {
+            finding.severity = downgradeSeverity(finding.severity);
+          }
+          findings.push(finding);
+          break;
+        }
       }
     }
   }
@@ -458,17 +485,36 @@ export function scanLocalPath(localPath: string): RawScanResult {
     const tmp = mkdtempSync(join(tmpdir(), "dshscan-zip-"));
     try {
       const zip = new AdmZip(resolved);
-      zip.extractAllTo(tmp, true);
-      const files = collectTextFiles(tmp);
-      for (const file of files) {
-        const rel = relative(tmp, file).replace(/\\/g, "/");
-        const text = readTextFile(file);
-        if (!text) continue;
-        const fileFindings = scanText(text, `${basename(resolved)}/${rel}`);
-        findings.push(...fileFindings);
-        if (basename(file).toLowerCase().startsWith("readme")) readmeParts.push(text.slice(0, 12000));
-        if (fileFindings.some((f) => f.severity === "high" || f.severity === "critical")) {
-          codeExcerpts.push(`--- ${rel} ---\n${text.slice(0, 4000)}`);
+      const entries = zip.getEntries();
+      const unsafeEntry = entries.find((entry) => {
+        const name = entry.entryName.replace(/\\/g, "/");
+        return name.startsWith("/") || name.split("/").includes("..");
+      });
+      if (unsafeEntry) {
+        findings.push({
+          id: "E006",
+          severity: "high",
+          category: "zip-slip",
+          title: "Unsafe zip entry path (zip-slip)",
+          evidence: `${basename(resolved)}: ${unsafeEntry.entryName}`,
+          recommendation:
+            "Reject this zip: it contains paths that could escape the extraction directory.",
+          source: "static",
+          rule: "E006",
+        });
+      } else {
+        zip.extractAllTo(tmp, true);
+        const files = collectTextFiles(tmp);
+        for (const file of files) {
+          const rel = relative(tmp, file).replace(/\\/g, "/");
+          const text = readTextFile(file);
+          if (!text) continue;
+          const fileFindings = scanText(text, `${basename(resolved)}/${rel}`);
+          findings.push(...fileFindings);
+          if (basename(file).toLowerCase().startsWith("readme")) readmeParts.push(text.slice(0, 12000));
+          if (fileFindings.some((f) => f.severity === "high" || f.severity === "critical")) {
+            codeExcerpts.push(`--- ${rel} ---\n${text.slice(0, 4000)}`);
+          }
         }
       }
     } finally {
@@ -551,9 +597,9 @@ export function metadataFindings(meta: PluginMeta): Finding[] {
   return findings;
 }
 
-export function computeScore(findings: Finding[], meta: PluginMeta | null): number {
-  // 每个类别只取最高严重级的权重：同一类别的重复命中（如 install.sh 里 40 处 chmod）
-  // 不再叠加计分，避免噪音把分数顶满。类别间仍可叠加，总量封顶 100。
+export function computeScore(findings: Finding[], _meta: PluginMeta | null): number {
+  // 元数据风险已通过 M001-M004 findings 进入计分，这里不再做二次加减，
+  // 避免同一信号被重复计分。
   const byCategory = new Map<string, number>();
   for (const f of findings) {
     if (f.source === "semantic") continue;
@@ -562,21 +608,6 @@ export function computeScore(findings: Finding[], meta: PluginMeta | null): numb
   }
   let score = 0;
   for (const w of byCategory.values()) score += w;
-
-  if (meta) {
-    const trust = meta.trust ?? "";
-    if (trust === "gold") score -= 5;
-    else if (trust === "silver") score -= 2;
-    else score += 3;
-
-    if (meta.verified) score -= 3;
-    else score += 5;
-
-    const stars = meta.stars ?? 0;
-    if (stars < 10) score += 5;
-    else if (stars < 100) score += 3;
-    else if (stars >= 1000) score -= 2;
-  }
 
   return Math.max(0, Math.min(100, score));
 }
@@ -807,7 +838,7 @@ export async function scanTarget(target: TargetInfo, opts: ScanOptions = {}): Pr
 
   const report: ScanReport = {
     tool: TOOL_NAME,
-    version: TOOL_VERSION,
+    version: VERSION,
     target,
     risk_score: finalScore,
     severity,

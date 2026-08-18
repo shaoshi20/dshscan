@@ -61,7 +61,7 @@ export const RULES: Rule[] = [
     // IPv6 回环 [::1]、W3C/XML 命名空间 URI 与本地/示例域名；
     // 只报代码里写死的公网 http:// 端点。
     pattern:
-      /(?<![\w$:{-])http:\/\/(?!\$\{|#\{|\{|%)(?!(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|www\.w3\.org|schemas\.|xmlns\.|purl\.org)[\w./:-]*|(?:[a-z0-9-]+\.)*(?:local|example)(?:\/|:|\s|["']|$)|example\.(?:com|org|net)(?:\/|:|\s|["']|$)|[a-z0-9-]+\.test(?:\/|:|\s|["']|$))[^\s"'`)]+/i,
+      /(?<![\w$:{-])http:\/\/(?!\$\{|#\{|\{|%)(?!(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|www\.w3\.org|schemas\.|xmlns\.|purl\.org)[\w./:-]*|(?:[a-z0-9-]+\.)*(?:local|example)(?:\/|:|\s|["']|$)|example\.(?:com|org|net)(?:\/|:|\s|["']|$)|[a-z0-9-]+\.test(?:\/|:|\s|["']|$))[^\s"'`)]{1,200}/i,
     recommendation:
       "Use HTTPS for any network communication. If HTTP is required for local development, ensure it is not used to exfiltrate data.",
   },
@@ -73,7 +73,7 @@ export const RULES: Rule[] = [
     // 排除私网/链路本地/环回段（10.x、172.16-31.x、192.168.x、169.254.x、127.x），
     // 它们在内网配置/测试夹具里太常见；只留公网硬编码 IP 作为弱信号。
     pattern:
-      /(?:https?|wss?|ftp):\/\/(?!127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?[^\s"'`)]*|["'`](?!127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)(?:\d{1,3}\.){3}\d{1,3}["'`]/i,
+      /(?:https?|wss?|ftp):\/\/(?!127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?[^\s"'`)]{0,200}|["'`](?!127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)(?:\d{1,3}\.){3}\d{1,3}["'`]/i,
     recommendation:
       "Hardcoded IP endpoints are often staging/exfiltration infrastructure. Resolve the domain and verify ownership.",
   },
@@ -83,7 +83,7 @@ export const RULES: Rule[] = [
     category: "credential-theft",
     title: "Credential access combined with suspicious code",
     pattern:
-      /(?=.*(?:process\.env|getenv|os\.environ|environ\[|Deno\.env))(?=.*(?:api[_-]?key|secret|token|password|passwd|credential|bearer))(?=.*(?:https?:\/\/|fetch\s*\(|axios|requests\.|urllib|http\.|send|upload|post))/i,
+      /(?=.{0,200}(?:process\.env|getenv|os\.environ|environ\[|Deno\.env))(?=.{0,200}(?:api[_-]?key|secret|token|password|passwd|credential|bearer))(?=.{0,200}(?:https?:\/\/|fetch\s*\(|axios|requests\.|urllib|http\.|send|upload|post))/i,
     recommendation:
       "Avoid reading secrets and sending them to external endpoints. Use secret managers and never log or exfiltrate credentials.",
   },
@@ -117,7 +117,7 @@ export const RULES: Rule[] = [
     // 去掉过宽的 "do not tell/show the user" 分支（agent 插件的安装技能里
     // 正常会隐藏自动化步骤）；保留更强的指令覆盖信号。
     pattern:
-      /(?:ignore\s+(?:all\s+|any\s+|the\s+)?(?:previous|above|prior|earlier|system).{0,60}instructions?|disregard\s+.{0,40}instructions?|you\s+are\s+now\s+|\*\*(?:system|developer)\s+prompt\s*\*\*|jailbreak)/i,
+      /(?:ignore\s+(?:all\s+|any\s+|the\s+)?(?:previous|above|prior|earlier|system).{0,60}instructions?|disregard\s+.{0,40}instructions?|you\s+are\s+now\s+(?:a|an|the)\s+[\w-]+\s+(?:agent|assistant|bot|model|system|helper|plugin|skill)|\*\*(?:system|developer)\s+prompt\s*\*\*|jailbreak)/i,
     recommendation:
       "Treat documentation/README as untrusted data. If the plugin instructs the agent to override instructions or hide behavior, do not install.",
   },

@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { loadIndex, resolveTarget, scanTarget, type ScanOptions } from "./scanner.js";
 import type { PluginMeta, ScanReport } from "./types.js";
+import { VERSION } from "./version.js";
 
 const USAGE = `DShScan - DSH plugin security scanner (SkillSpector-style)
 
@@ -65,7 +66,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     return 0;
   }
   if (values.version) {
-    console.log("DShScan 0.1.0");
+    console.log(`DShScan ${VERSION}`);
     return 0;
   }
   if (positionals.length === 0) {
