@@ -218,3 +218,8 @@ test("R009 flags package.json lifecycle script", () => {
   const f = scanText(pkg, "package.json");
   assert.ok(f.some((x) => x.id === "R009" && x.severity === "high"));
 });
+
+test("M005 flags possible typosquatting", () => {
+  const f = metadataFindings({ name: "dsh-browzer", verified: true, stars: 100, trust: "silver" });
+  assert.ok(f.some((x) => x.id === "M005" && x.severity === "high"));
+});

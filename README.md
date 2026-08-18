@@ -29,6 +29,7 @@ dsh plugin add @shaoshi/dshscan
   - 静态规则扫描（完全离线）
   - 可选 LLM 语义扫描（需 API Key）
 - **dshbase 集成**：输入插件名时自动读取本地索引元数据（stars / trust / verified / npm / cmd）
+- **npm 源码扫描**：npm 插件可自动 `npm pack` 下载并扫描包内容
 - **误报处理**：每条 finding 都带证据 + 修复建议
 - **批量扫描**：支持对 dshbase 插件目录批量扫描并输出汇总 JSON
 
@@ -185,7 +186,7 @@ dshscan --batch --all --offline --output all.json
 | R010 | high | DSH：cordis.patch.yml 插件树注入（insert 危险 loader / 禁用安全行） |
 | R011 | high | DSH：client.mjs 浏览器侧恶意代码（sendBeacon、键盘记录、DOM 注入、外连） |
 | R012 | critical | DSH：profile 配置篡改（禁用安全行、添加可疑 bundle、写/执行 profile 文件） |
-| M001–M004 | low/medium | 索引元数据风险信号 |
+| M001–M005 | low/high | 索引元数据风险信号（M005=疑似 typosquatting） |
 | E001–E005 | medium/high | 扫描限制/输入错误 |
 
 ### DSH 特有攻击面

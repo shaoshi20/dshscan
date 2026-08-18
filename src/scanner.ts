@@ -163,6 +163,31 @@ export function cloneRepo(url: string, dest: string): void {
   });
 }
 
+export function scanNpmPackage(packageName: string): RawScanResult | null {
+  const tmp = mkdtempSync(join(tmpdir(), "dshscan-npm-"));
+  try {
+    execFileSync(
+      "npm",
+      ["pack", packageName, "--pack-destination", tmp, "--ignore-scripts", "--silent"],
+      { stdio: "pipe", encoding: "utf-8", timeout: 120_000, maxBuffer: 10 * 1024 * 1024 },
+    );
+    const tgz = readdirSync(tmp).find((f) => f.endsWith(".tgz"));
+    if (!tgz) return null;
+    const extract = mkdtempSync(join(tmp, "extract-"));
+    execFileSync("tar", ["-xzf", join(tmp, tgz), "-C", extract], {
+      stdio: "pipe",
+      encoding: "utf-8",
+      timeout: 120_000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return scanLocalPath(extract);
+  } catch {
+    return null;
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 export function collectTextFiles(root: string): string[] {
   const out: string[] = [];
   const stack = [root];
@@ -343,6 +368,41 @@ const SECURITY_ROW_IDS = [
 ];
 
 const SUSPICIOUS_BUNDLE_RE = /(?:evil|malicious|hack|backdoor|exfil|miner|keylog)/i;
+
+const KNOWN_PLUGIN_NAMES = [
+  "dsh-browser",
+  "dsh-market",
+  "dsh-memory-evolve",
+  "modlens",
+  "openviking",
+  "dsh-web-ui",
+  "dsh-suite",
+  "dsh-plugin-marketplace",
+  "dsh-skill-viewer",
+  "dsh-vision",
+];
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[] = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = Math.min(
+        dp[j] + 1,
+        dp[j - 1] + 1,
+        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
 
 function tryParseYaml(text: string): { parsed: boolean; data: unknown } {
   try {
@@ -735,6 +795,29 @@ export function metadataFindings(meta: PluginMeta): Finding[] {
     });
   }
 
+  const bareName = meta.name.toLowerCase().replace(/^@[^/]+\//, "");
+  for (const known of KNOWN_PLUGIN_NAMES) {
+    if (
+      bareName !== known &&
+      bareName.length >= 4 &&
+      known.length >= 4 &&
+      levenshtein(bareName, known) <= 2
+    ) {
+      findings.push({
+        id: "M005",
+        severity: "high",
+        category: "metadata-risk",
+        title: "Possible typosquatting / name confusion",
+        evidence: `${meta.name} is visually similar to known plugin '${known}'`,
+        recommendation:
+          "Verify the maintainer and repository carefully. Typosquatting is a common supply-chain attack vector.",
+        source,
+        rule: "M005",
+      });
+      break;
+    }
+  }
+
   return findings;
 }
 
@@ -908,18 +991,40 @@ export async function scanTarget(target: TargetInfo, opts: ScanOptions = {}): Pr
       }
     }
   } else if (target.kind === "plugin" && target.metadata?.npm) {
-    findings.push({
-      id: "E004",
-      severity: "medium",
-      category: "scan-limitation",
-      title: "npm package source not downloaded",
-      evidence: `${target.metadata.name} (npm=true, cmd=${target.metadata.cmd ?? ""})`,
-      recommendation:
-        "Install the package in a sandbox and scan its unpacked contents, or provide a local directory of the package.",
-      source: "static",
-      rule: "E004",
-    });
-    sourceAvailable = false;
+    if (opts.offline) {
+      findings.push({
+        id: "E004",
+        severity: "medium",
+        category: "scan-limitation",
+        title: "npm package source not downloaded (offline mode)",
+        evidence: `${target.metadata.name} (npm=true, cmd=${target.metadata.cmd ?? ""})`,
+        recommendation:
+          "Re-run without --offline to download and scan the npm package, or provide a local directory of the package.",
+        source: "static",
+        rule: "E004",
+      });
+      sourceAvailable = false;
+    } else {
+      const raw = scanNpmPackage(target.metadata.name);
+      if (raw) {
+        findings.push(...raw.findings);
+        readmeText = raw.readmeText;
+        codeExcerpts = raw.codeExcerpts;
+      } else {
+        findings.push({
+          id: "E004",
+          severity: "high",
+          category: "scan-limitation",
+          title: "Failed to download npm package source",
+          evidence: `${target.metadata.name} (npm=true)`,
+          recommendation:
+            "Check npm registry access or install the package in a sandbox and scan its unpacked contents.",
+          source: "static",
+          rule: "E004",
+        });
+        sourceAvailable = false;
+      }
+    }
   } else {
     findings.push({
       id: "E005",
