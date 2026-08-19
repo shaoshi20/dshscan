@@ -5,6 +5,8 @@
 [![License](https://img.shields.io/github/license/shaoshi20/dshscan)](https://github.com/shaoshi20/dshscan/blob/main/LICENSE)
 [![dshbase](https://img.shields.io/badge/dshbase-已收录-brightgreen)](https://dshbase.com/plugins/@shaoshi/dshscan/)
 
+**[English](README.en.md) | 中文**
+
 DSH 插件安全审查器（DShScan），模仿 NVIDIA SkillSpector 机制，为 dshbase.com 插件目录中的 DSH 插件提供风险评分、严重等级、证据清单和安装建议。
 
 ## Demo
