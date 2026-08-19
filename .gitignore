@@ -10,3 +10,6 @@ dist/
 
 # Local dshbase plugin index (machine-specific)
 dshbase-directory.json
+
+# Large generated batch reports
+reports/*.json
