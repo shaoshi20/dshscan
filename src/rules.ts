@@ -123,6 +123,43 @@ export const RULES: Rule[] = [
   },
 ];
 
+const RULE_SCOPES: Record<string, string> = {
+  R001: "static",
+  R002: "static",
+  R002b: "static",
+  R003: "static",
+  R004: "static",
+  R004b: "static",
+  R005: "static",
+  R006: "static",
+  R007: "static",
+  R008: "static",
+  R009: "package",
+  R010: "dsh",
+  R011: "dsh",
+  R012: "dsh",
+  M001: "metadata",
+  M002: "metadata",
+  M003: "metadata",
+  M004: "metadata",
+  M005: "metadata",
+  D001: "dependency",
+  D002: "dependency",
+  D003: "dependency",
+  E001: "limitation",
+  E002: "limitation",
+  E003: "limitation",
+  E004: "limitation",
+  E005: "limitation",
+  E006: "limitation",
+  AUDIT: "dependency",
+};
+
+for (const rule of RULES) {
+  rule.scope = RULE_SCOPES[rule.id] ?? "static";
+  rule.enabled = true;
+}
+
 export function buildFinding(
   rule: Rule,
   evidence: string,
@@ -137,6 +174,7 @@ export function buildFinding(
     recommendation: rule.recommendation,
     source,
     rule: rule.id,
+    scope: rule.scope,
   };
 }
 
@@ -189,5 +227,6 @@ export function buildDshFinding(
     recommendation: spec.recommendation,
     source,
     rule: spec.id,
+    scope: "dsh",
   };
 }

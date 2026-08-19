@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { parseArgs } from "node:util";
 import { loadIndex, resolveTarget, scanTarget, type ScanOptions } from "./scanner.js";
 import { RULES } from "./rules.js";
-import type { PluginMeta, ScanReport, Severity } from "./types.js";
+import type { PluginMeta, Policy, ScanReport, Severity } from "./types.js";
 import { VERSION } from "./version.js";
 
 const USAGE = `DShScan - DSH plugin security scanner (SkillSpector-style)
@@ -28,6 +28,8 @@ Options:
       --online             Allow cloning remote repos in batch mode
       --audit              Run npm audit on scanned package dependencies
       --rules <file>       Load additional JSON rules (id,severity,category,title,pattern,recommendation)
+      --policy <file>      Load policy JSON (ignoreRules, severityOverrides, includeScopes, excludeScopes)
+      --audit-log <file>   Append JSONL audit log for flagged findings
       --serve              Start a local web dashboard
       --port <number>      Port for --serve (default 8787)
   -h, --help               Show this help
@@ -136,11 +138,17 @@ function loadCustomRules(file: string): void {
   }
 }
 
+function loadPolicy(file: string): Policy {
+  return JSON.parse(readFileSync(file, "utf-8")) as Policy;
+}
+
 async function serveDashboard(plugins: PluginMeta[], port: number, values: {
   index?: string;
   offline?: boolean;
   semantic?: boolean;
   audit?: boolean;
+  policy?: Policy;
+  "audit-log"?: string;
   "llm-model"?: string;
   "llm-base-url"?: string;
   "llm-api-key"?: string;
@@ -198,6 +206,8 @@ async function scan(){
           offline,
           semantic,
           audit,
+          policy: values.policy,
+          auditLog: values["audit-log"],
           llmModel: values["llm-model"],
           llmBaseUrl: values["llm-base-url"],
           llmApiKey: values["llm-api-key"],
@@ -233,6 +243,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     html?: boolean;
     audit?: boolean;
     rules?: string;
+    policy?: string;
+    "audit-log"?: string;
     serve?: boolean;
     port?: string;
     batch?: boolean;
@@ -259,6 +271,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         html: { type: "boolean" },
         audit: { type: "boolean" },
         rules: { type: "string" },
+        policy: { type: "string" },
+        "audit-log": { type: "string" },
         serve: { type: "boolean" },
         port: { type: "string" },
         batch: { type: "boolean" },
@@ -311,11 +325,22 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     }
   }
 
+  let policy: Policy | undefined;
+  if (values.policy) {
+    try {
+      policy = loadPolicy(values.policy);
+    } catch (err) {
+      console.error(`dshscan: failed to load policy: ${err instanceof Error ? err.message : String(err)}`);
+      return 2;
+    }
+  }
+
   if (values.serve) {
+    const serveValues = { ...values, policy } as Parameters<typeof serveDashboard>[2];
     return await serveDashboard(
       plugins,
       Number(values.port ?? 8787) || 8787,
-      values,
+      serveValues,
     );
   }
 
@@ -337,6 +362,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           offline,
           semantic: values.semantic ?? false,
           audit: values.audit ?? false,
+          policy,
+          auditLog: values["audit-log"],
           llmModel: values["llm-model"],
           llmBaseUrl: values["llm-base-url"],
           llmApiKey: values["llm-api-key"],
@@ -414,6 +441,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     offline: values.offline ?? false,
     semantic: values.semantic ?? false,
     audit: values.audit ?? false,
+    policy,
+    auditLog: values["audit-log"],
     llmModel: values["llm-model"],
     llmBaseUrl: values["llm-base-url"],
     llmApiKey: values["llm-api-key"],

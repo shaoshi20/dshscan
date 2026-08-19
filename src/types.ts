@@ -11,6 +11,7 @@ export interface Finding {
   recommendation: string;
   source: FindingSource;
   rule?: string;
+  scope?: string;
 }
 
 export interface PluginMeta {
@@ -63,6 +64,17 @@ export interface Rule {
   title: string;
   pattern: RegExp;
   recommendation: string;
+  scope?: string;
+  enabled?: boolean;
+}
+
+export interface Policy {
+  ignoreRules?: string[];
+  severityOverrides?: Record<string, Severity>;
+  includeScopes?: string[];
+  excludeScopes?: string[];
+  maxRiskScore?: number;
+  auditLog?: string;
 }
 
 export interface SemanticResult {

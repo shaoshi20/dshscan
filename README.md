@@ -33,6 +33,8 @@ dsh plugin add @shaoshi/dshscan
 - **依赖审计**：检查未锁定版本、远程依赖源、依赖包名仿冒；可选 `--audit` 调用 npm audit
 - **DSH manifest 校验**：检查 `dsh.bundle`、`cordis.patch.yml`、LICENSE、README
 - **自定义规则**：支持 `--rules <file>` 加载 JSON 规则
+- **策略文件**：支持 `--policy <file>` 配置 ignoreRules / severityOverrides / includeScopes / excludeScopes
+- **审计日志**：支持 `--audit-log <file>` 以 JSONL 记录每个被标记项
 - **Web Dashboard**：支持 `--serve` 启动本地可视化面板
 - **HTML 报告**：支持 `--html` 输出独立网页报告
 - **误报处理**：每条 finding 都带证据 + 修复建议
@@ -91,6 +93,9 @@ dshscan <plugin-name> --audit
 
 # 加载自定义规则
 dshscan <plugin-name> --rules custom-rules.json
+
+# 加载策略并输出审计日志
+dshscan <plugin-name> --policy policy.json --audit-log audit.jsonl
 
 # 启动本地 Web 可视化面板
 dshscan --serve --port 8787

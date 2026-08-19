@@ -246,3 +246,10 @@ test("DSH manifest validation flags missing dsh.bundle", () => {
   const raw = scanLocalPath("test-fixtures/dsh-malicious");
   assert.ok(raw.findings.some((x) => x.id === "M006"));
 });
+
+test("policy can ignore rules", async () => {
+  const report = await scanTarget(resolveTarget("test-fixtures/malicious", [], false), {
+    policy: { ignoreRules: ["R001"] },
+  });
+  assert.ok(!report.findings.some((f) => f.id === "R001"));
+});

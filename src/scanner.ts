@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import AdmZip from "adm-zip";
@@ -10,6 +10,7 @@ import { VERSION } from "./version.js";
 import type {
   Finding,
   PluginMeta,
+  Policy,
   ScanReport,
   Severity,
   TargetInfo,
@@ -101,6 +102,8 @@ export interface ScanOptions {
   offline?: boolean;
   semantic?: boolean;
   audit?: boolean;
+  policy?: Policy;
+  auditLog?: string;
   llmModel?: string;
   llmBaseUrl?: string;
   llmApiKey?: string;
@@ -1251,6 +1254,7 @@ export async function scanTarget(target: TargetInfo, opts: ScanOptions = {}): Pr
   const staticScore = computeScore(deduped, target.metadata);
   let finalScore = staticScore;
   let llmUsed = false;
+  let semanticRiskScore = 0;
   let semanticFindings: Finding[] = [];
   let semanticNote = "";
 
@@ -1265,6 +1269,7 @@ export async function scanTarget(target: TargetInfo, opts: ScanOptions = {}): Pr
     });
     if (sem.used && sem.riskScore !== undefined) {
       llmUsed = true;
+      semanticRiskScore = sem.riskScore;
       semanticFindings = sem.findings ?? [];
       finalScore = Math.round(staticScore * 0.7 + sem.riskScore * 0.3);
       semanticNote = "已完成静态+LLM语义双通道扫描。";
@@ -1275,7 +1280,34 @@ export async function scanTarget(target: TargetInfo, opts: ScanOptions = {}): Pr
     semanticNote = "仅静态扫描，非完整扫描。";
   }
 
-  const allFindings = dedupeFindings([...deduped, ...semanticFindings]);
+  let allFindings = dedupeFindings([...deduped, ...semanticFindings]);
+
+  // Policy seam: ignore rules, scope filtering, severity overrides.
+  if (opts.policy) {
+    const pol = opts.policy;
+    if (pol.ignoreRules?.length) {
+      const ignore = new Set(pol.ignoreRules);
+      allFindings = allFindings.filter((f) => !ignore.has(f.id));
+    }
+    if (pol.includeScopes?.length) {
+      const scopes = new Set(pol.includeScopes);
+      allFindings = allFindings.filter((f) => !f.scope || scopes.has(f.scope));
+    }
+    if (pol.excludeScopes?.length) {
+      const scopes = new Set(pol.excludeScopes);
+      allFindings = allFindings.filter((f) => !f.scope || !scopes.has(f.scope));
+    }
+    if (pol.severityOverrides) {
+      allFindings = allFindings.map((f) =>
+        pol.severityOverrides![f.id] ? { ...f, severity: pol.severityOverrides![f.id]! } : f,
+      );
+    }
+    const policyScore = computeScore(allFindings, target.metadata);
+    finalScore = llmUsed
+      ? Math.round(policyScore * 0.7 + semanticRiskScore * 0.3)
+      : policyScore;
+  }
+
   const severity = severityFromScore(finalScore);
   const safeToInstall =
     !allFindings.some((f) => f.severity === "high" || f.severity === "critical") &&
@@ -1303,7 +1335,40 @@ export async function scanTarget(target: TargetInfo, opts: ScanOptions = {}): Pr
     metadata: target.metadata,
   };
 
+  if (opts.auditLog) {
+    const audit = {
+      timestamp: new Date().toISOString(),
+      tool: TOOL_NAME,
+      version: VERSION,
+      target: report.target.displayName,
+      risk_score: report.risk_score,
+      severity: report.severity,
+      safe_to_install: report.safe_to_install,
+      findings: report.findings.map((f) => ({
+        id: f.id,
+        rule: f.rule,
+        scope: f.scope,
+        severity: f.severity,
+        category: f.category,
+        evidence: f.evidence,
+      })),
+    };
+    appendFileSync(opts.auditLog, `${JSON.stringify(audit)}\n`, "utf-8");
+  }
+
   return report;
+}
+
+function assignScope(f: Finding): Finding {
+  if (f.scope) return f;
+  if (["R010", "R011", "R012"].includes(f.id)) f.scope = "dsh";
+  else if (f.id.startsWith("R")) f.scope = "static";
+  else if (f.id.startsWith("M")) f.scope = "metadata";
+  else if (f.id.startsWith("D")) f.scope = "dependency";
+  else if (f.id.startsWith("AUDIT")) f.scope = "dependency";
+  else if (f.id.startsWith("E")) f.scope = "limitation";
+  else f.scope = "static";
+  return f;
 }
 
 function dedupeFindings(findings: Finding[]): Finding[] {
@@ -1313,7 +1378,7 @@ function dedupeFindings(findings: Finding[]): Finding[] {
     const key = `${f.id}|${f.evidence}|${f.source}`;
     if (!seen.has(key)) {
       seen.add(key);
-      out.push(f);
+      out.push(assignScope(f));
     }
   }
   return out;
