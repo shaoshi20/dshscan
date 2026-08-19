@@ -19,6 +19,12 @@ Listed on the **dshbase plugin directory**:
 https://dshbase.com/plugins/@shaoshi/dshscan/
 ```
 
+Online demo:
+
+```text
+https://shaoshi20.github.io/dshscan/
+```
+
 Install as a DSH plugin:
 
 ```bash

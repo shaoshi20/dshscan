@@ -21,6 +21,12 @@ DSH 插件安全审查器（DShScan），模仿 NVIDIA SkillSpector 机制，为
 https://dshbase.com/plugins/@shaoshi/dshscan/
 ```
 
+在线 Demo：
+
+```text
+https://shaoshi20.github.io/dshscan/
+```
+
 作为 DSH 插件安装：
 
 ```bash
