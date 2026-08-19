@@ -59,15 +59,21 @@
 - 风险点：M005 疑似仿冒；stars 极低
 - 建议：低星 + 疑似仿冒，安装前重点审查
 
+## 在线复核结果（已执行）
+
+| 插件 | 风险分 | 严重级 | 安全安装 | Findings | 主要命中 |
+|---|---:|---|---:|---:|---|
+| DSH-Plugins-Marketplace | 100 | critical | ❌ | 42 | R001 / R012 / R005 / R006 / R011 |
+| ds-web-ui | 30 | medium | ✅ | 59 | D001 未锁定依赖 |
+| dsh-skills-viewer | 15 | low | ✅ | 9 | D001 未锁定依赖 |
+| dsh-fusion | 30 | medium | ✅ | 24 | D001 + R009 prepare 脚本 |
+
+> 注意：`DSH-Plugins-Marketplace` 本身是一个“插件市场/安全扫描类”项目，代码里包含大量 `curl|bash`、`Invoke-Expression` 等**检测规则字符串**，因此 R001/R012 命中可能来自其自身检测逻辑/文档，而非真实恶意行为。需要人工结合上下文判断。
+
 ## 建议下一步
 
-- 对上述 4 个插件使用在线模式拉取源码做完整静态扫描：
-  ```bash
-  dshscan github:bradeGithub/DSH-Plugins-Marketplace --audit
-  dshscan github:xing-shuyin/ds-web-ui --audit
-  dshscan github:winterhuan/dsh-skills-viewer --audit
-  dshscan github:omdsh-dev/dsh-fusion --audit
-  ```
+- 对 `DSH-Plugins-Marketplace` 做人工代码审计，重点确认 `lib/index.js` 中的检测规则字符串与真实执行路径。
+- 其余 3 个主要是依赖未锁定的供应链卫生问题，建议固定版本后使用。
 - 如确认安全，可在策略中忽略对应 M005：
   ```json
   { "ignoreRules": ["M005"] }
