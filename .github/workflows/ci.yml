@@ -23,3 +23,10 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run benchmark
+      - run: npm run benchmark:report -- --output benchmark-report.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report-node${{ matrix.node-version }}
+          path: benchmark-report.json
+          retention-days: 30

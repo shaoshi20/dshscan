@@ -34,6 +34,7 @@ Options:
       --audit-log <file>   Append JSONL audit log for flagged findings
       --serve              Start a local web dashboard
       --port <number>      Port for --serve (default 8787)
+      --history <file>     Dashboard trend history file (default ./.dshscan-history.json or DSCAN_HISTORY)
       --benchmark          Run the benchmark evaluation suite
       --benchmark-dir <d>  Benchmark cases directory (default ./benchmark/cases)
   -h, --help               Show this help
@@ -146,6 +147,25 @@ function loadPolicy(file: string): Policy {
   return JSON.parse(readFileSync(file, "utf-8")) as Policy;
 }
 
+function defaultHistoryPath(): string {
+  return process.env.DSCAN_HISTORY ?? join(process.cwd(), ".dshscan-history.json");
+}
+
+function loadHistory(file: string): Array<Record<string, unknown>> {
+  try {
+    const data = JSON.parse(readFileSync(file, "utf-8")) as Array<Record<string, unknown>>;
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendHistory(file: string, record: Record<string, unknown>): void {
+  const history = loadHistory(file);
+  history.push(record);
+  writeFileSync(file, JSON.stringify(history.slice(-200), null, 2), "utf-8");
+}
+
 async function serveDashboard(plugins: PluginMeta[], port: number, values: {
   index?: string;
   offline?: boolean;
@@ -156,37 +176,166 @@ async function serveDashboard(plugins: PluginMeta[], port: number, values: {
   "llm-model"?: string;
   "llm-base-url"?: string;
   "llm-api-key"?: string;
+  history?: string;
 }): Promise<number> {
+  const historyFile = values.history ?? defaultHistoryPath();
   const html = `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <title>DShScan Web Dashboard</title>
 <style>
-body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px}
+body{font-family:system-ui,sans-serif;max-width:1000px;margin:40px auto;padding:0 20px;color:#222}
+h1{border-bottom:2px solid #eee;padding-bottom:10px}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0;align-items:center}
 input,button{font-size:16px;padding:8px;margin:4px 0}
-pre{background:#f4f4f4;padding:12px;border-radius:8px;overflow:auto}
+label{display:flex;align-items:center;gap:4px}
+pre{background:#f4f4f4;padding:12px;border-radius:8px;overflow:auto;max-height:300px}
+.charts{display:flex;flex-wrap:wrap;gap:20px;margin:16px 0}
+.chart-box{flex:1 1 400px;border:1px solid #ddd;border-radius:8px;padding:12px}
+canvas{width:100%;height:220px}
+table{border-collapse:collapse;width:100%;margin-top:12px}
+th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}
+th{background:#f4f4f4}
 </style>
 </head>
 <body>
 <h1>DShScan Web Dashboard</h1>
-<input id="target" placeholder="plugin-name / github:owner/repo / path" style="width:70%">
-<button onclick="scan()">Scan</button>
-<label><input id="offline" type="checkbox"> offline</label>
-<label><input id="semantic" type="checkbox"> semantic</label>
-<label><input id="audit" type="checkbox"> audit</label>
+<div class="controls">
+  <input id="target" placeholder="plugin-name / github:owner/repo / path" style="width:50%">
+  <button onclick="scan()">Scan</button>
+  <label><input id="offline" type="checkbox"> offline</label>
+  <label><input id="semantic" type="checkbox"> semantic</label>
+  <label><input id="audit" type="checkbox"> audit</label>
+</div>
+<div class="charts">
+  <div class="chart-box"><h3>Risk Score Trend</h3><canvas id="riskChart" height="220"></canvas></div>
+  <div class="chart-box"><h3>Findings per Scan</h3><canvas id="findingsChart" height="220"></canvas></div>
+  <div class="chart-box"><h3>Severity Distribution</h3><canvas id="severityChart" height="220"></canvas></div>
+</div>
+<h2>Recent Scans</h2>
+<table id="historyTable">
+<thead><tr><th>Time</th><th>Target</th><th>Risk</th><th>Severity</th><th>Safe</th><th>Findings</th><th>Mode</th></tr></thead>
+<tbody></tbody>
+</table>
+<h2>Last Report</h2>
 <pre id="out">Waiting...</pre>
 <script>
-async function scan(){
-  const target=document.getElementById('target').value;
-  const offline=document.getElementById('offline').checked;
-  const semantic=document.getElementById('semantic').checked;
-  const audit=document.getElementById('audit').checked;
-  const out=document.getElementById('out');
-  out.textContent='Scanning...';
-  const res=await fetch('/api/scan?target='+encodeURIComponent(target)+'&offline='+offline+'&semantic='+semantic+'&audit='+audit);
-  out.textContent=await res.text();
+var records=[];
+function el(id){return document.getElementById(id);}
+async function loadHistory(){
+  try{
+    const res=await fetch('/api/history');
+    records=await res.json();
+    render();
+  }catch(e){console.error(e);}
 }
+async function scan(){
+  const target=el('target').value;
+  const offline=el('offline').checked;
+  const semantic=el('semantic').checked;
+  const audit=el('audit').checked;
+  const out=el('out');
+  out.textContent='Scanning...';
+  try{
+    const res=await fetch('/api/scan?target='+encodeURIComponent(target)+'&offline='+offline+'&semantic='+semantic+'&audit='+audit);
+    out.textContent=await res.text();
+  }catch(e){
+    out.textContent='Error: '+e;
+  }
+  await loadHistory();
+}
+function render(){
+  renderTable();
+  renderLine('riskChart', records.map(function(h){return Number(h.risk_score)||0;}), '#e67e22');
+  renderLine('findingsChart', records.map(function(h){return Number(h.findings)||0;}), '#3498db');
+  renderSeverity();
+}
+function renderTable(){
+  const tbody=el('historyTable').querySelector('tbody');
+  tbody.innerHTML='';
+  const rows=records.slice().reverse().slice(0,20);
+  for(let i=0;i<rows.length;i++){
+    const h=rows[i];
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+new Date(h.timestamp).toLocaleString()+'</td><td>'+escapeHtml(h.target)+'</td><td>'+h.risk_score+'</td><td>'+h.severity+'</td><td>'+h.safe_to_install+'</td><td>'+h.findings+'</td><td>'+h.scan_mode+'</td>';
+    tbody.appendChild(tr);
+  }
+}
+function escapeHtml(v){
+  return String(v==null?'':v).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function renderLine(canvasId, values, color){
+  const canvas=el(canvasId);
+  const ctx=canvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  const w=canvas.clientWidth||canvas.parentNode.clientWidth||600;
+  const h=canvas.clientHeight||220;
+  canvas.width=w*dpr; canvas.height=h*dpr; ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  if(!values.length){
+    ctx.fillStyle='#999'; ctx.fillText('No data yet',10,20); return;
+  }
+  const pad=24;
+  const max=Math.max.apply(null,values.concat([100]));
+  const min=Math.min.apply(null,values.concat([0]));
+  const range=(max-min)||1;
+  const n=values.length;
+  ctx.strokeStyle='#eee'; ctx.fillStyle='#666'; ctx.font='12px system-ui';
+  for(let i=0;i<=4;i++){
+    const y=pad+((h-pad*2)*i/4);
+    ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(w-pad,y); ctx.stroke();
+    const val=max-((max-min)*i/4);
+    ctx.fillText(String(Math.round(val)),4,y+4);
+  }
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  for(let i=0;i<n;i++){
+    const x=pad+((w-pad*2)*(n===1?0.5:i/(n-1)));
+    const y=pad+((h-pad*2)*(1-(values[i]-min)/range));
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.fillStyle=color;
+  for(let i=0;i<n;i++){
+    const x=pad+((w-pad*2)*(n===1?0.5:i/(n-1)));
+    const y=pad+((h-pad*2)*(1-(values[i]-min)/range));
+    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+  }
+}
+function renderSeverity(){
+  const canvas=el('severityChart');
+  const ctx=canvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  const w=canvas.clientWidth||canvas.parentNode.clientWidth||600;
+  const h=canvas.clientHeight||220;
+  canvas.width=w*dpr; canvas.height=h*dpr; ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,w,h);
+  const sev=['critical','high','medium','low'];
+  const colors=['#c0392b','#e67e22','#f1c40f','#27ae60'];
+  const counts={critical:0,high:0,medium:0,low:0};
+  for(let i=0;i<records.length;i++){
+    const s=records[i].severity;
+    if(sev.indexOf(s)>=0) counts[s]++;
+  }
+  const max=Math.max.apply(null,sev.map(function(s){return counts[s];}).concat([1]));
+  const pad=24;
+  const slot=(w-pad*2)/sev.length;
+  ctx.fillStyle='#666'; ctx.font='12px system-ui';
+  for(let i=0;i<sev.length;i++){
+    const s=sev[i]; const c=counts[s];
+    const x=pad+i*slot+slot*0.15;
+    const bw=slot*0.7;
+    const bh=(h-pad*2)*c/max;
+    const y=pad+((h-pad*2)*(1-c/max));
+    ctx.fillStyle=colors[i];
+    ctx.fillRect(x,y,bw,Math.max(bh,c?2:0));
+    ctx.fillStyle='#333';
+    ctx.fillText(s+' '+c, x, h-6);
+  }
+}
+loadHistory();
 </script>
 </body>
 </html>`;
@@ -196,6 +345,11 @@ async function scan(){
     if (url.pathname === "/" || url.pathname === "/index.html") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(html);
+      return;
+    }
+    if (url.pathname === "/api/history") {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(loadHistory(historyFile)));
       return;
     }
     if (url.pathname === "/api/scan") {
@@ -215,6 +369,15 @@ async function scan(){
           llmModel: values["llm-model"],
           llmBaseUrl: values["llm-base-url"],
           llmApiKey: values["llm-api-key"],
+        });
+        appendHistory(historyFile, {
+          timestamp: new Date().toISOString(),
+          target: report.target.displayName,
+          risk_score: report.risk_score,
+          severity: report.severity,
+          safe_to_install: report.safe_to_install,
+          findings: report.findings.length,
+          scan_mode: report.scan_mode,
         });
         res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify(report, null, 2));
@@ -251,6 +414,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     "audit-log"?: string;
     serve?: boolean;
     port?: string;
+    history?: string;
     batch?: boolean;
     limit?: string;
     all?: boolean;
@@ -281,6 +445,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         "audit-log": { type: "string" },
         serve: { type: "boolean" },
         port: { type: "string" },
+        history: { type: "string" },
         batch: { type: "boolean" },
         limit: { type: "string" },
         all: { type: "boolean" },
@@ -308,15 +473,17 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     console.log(`DShScan ${VERSION}`);
     return 0;
   }
-  if (!values.batch && !values.benchmark && positionals.length === 0) {
+  if (!values.batch && !values.benchmark && !values.serve && positionals.length === 0) {
     console.error(USAGE);
     return 2;
   }
 
   if (values.benchmark) {
     const casesDir = values["benchmark-dir"] ?? join(process.cwd(), "benchmark", "cases");
+    let benchmarkFailed = false;
     try {
       const result = runBenchmark(casesDir);
+      benchmarkFailed = result.summary.passedCases !== result.summary.totalCases;
       if (values.summary) {
         const lines = [
           `DShScan ${VERSION} — benchmark`,
@@ -356,7 +523,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       console.error(`dshscan: benchmark failed: ${err instanceof Error ? err.message : String(err)}`);
       return 2;
     }
-    return 0;
+    return benchmarkFailed ? 1 : 0;
   }
 
   const targetRaw = positionals[0] ?? "";

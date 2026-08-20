@@ -49,7 +49,7 @@ dsh plugin add @shaoshi/dshscan
 - **自定义规则**：支持 `--rules <file>` 加载 JSON 规则
 - **策略文件**：支持 `--policy <file>` 配置 ignoreRules / severityOverrides / includeScopes / excludeScopes
 - **审计日志**：支持 `--audit-log <file>` 以 JSONL 记录每个被标记项
-- **Web Dashboard**：支持 `--serve` 启动本地可视化面板
+- **Web Dashboard**：支持 `--serve` 启动本地可视化面板，内置风险分数趋势、发现数量趋势、严重级分布图，并自动把扫描历史写入 `.dshscan-history.json`
 - **HTML 报告**：支持 `--html` 输出独立网页报告
 - **误报处理**：每条 finding 都带证据 + 修复建议
 - **批量扫描**：支持对 dshbase 插件目录批量扫描并输出汇总 JSON / HTML
@@ -111,8 +111,11 @@ dshscan <plugin-name> --rules custom-rules.json
 # 加载策略并输出审计日志
 dshscan <plugin-name> --policy policy.json --audit-log audit.jsonl
 
-# 启动本地 Web 可视化面板
+# 启动本地 Web 可视化面板（含趋势图，历史写入 .dshscan-history.json）
 dshscan --serve --port 8787
+
+# 指定历史文件
+dshscan --serve --port 8787 --history /path/to/history.json
 
 # 运行 Benchmark 评估集（恶意/良性样例，输出摘要）
 dshscan --benchmark --summary

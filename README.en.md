@@ -47,7 +47,7 @@ dsh plugin add @shaoshi/dshscan
 - **Custom rules**: `--rules <file>` loads JSON rules
 - **Policy files**: `--policy <file>` with `ignoreRules` / `severityOverrides` / `includeScopes` / `excludeScopes`
 - **Audit logs**: `--audit-log <file>` writes JSONL records
-- **Web dashboard**: `--serve` starts a local visual dashboard
+- **Web dashboard**: `--serve` starts a local visual dashboard with risk score trends, findings trends, severity distribution, and automatic scan history in `.dshscan-history.json`
 - **HTML reports**: `--html` outputs a standalone HTML report
 - **Batch scanning**: scan many dshbase plugins and export JSON / HTML summary
 - **Scheduled scans**: GitHub Actions daily batch scan
@@ -107,6 +107,12 @@ dshscan --benchmark --summary
 
 # Write the full benchmark JSON report
 dshscan --benchmark --pretty
+
+# Start the dashboard with trend charts (history in .dshscan-history.json)
+dshscan --serve --port 8787
+
+# Use a custom history file for dashboard trends
+dshscan --serve --port 8787 --history /path/to/history.json
 ```
 
 ## Environment Variables

@@ -1,6 +1,6 @@
 {
   "name": "@shaoshi/dshscan",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Security scanner for DSH plugins: static and semantic passes over plugin source, DSH-specific attack-surface rules, npm audit, batch scanning, and an HTML report with per-finding severity and evidence.",
   "type": "module",
   "bin": {
@@ -29,6 +29,7 @@
     "scan": "tsx src/main.ts",
     "test": "tsx --test test/*.test.mjs",
     "benchmark": "tsx src/main.ts --benchmark --summary",
+    "benchmark:report": "tsx src/main.ts --benchmark --pretty",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [

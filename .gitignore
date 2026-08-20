@@ -13,3 +13,7 @@ dshbase-directory.json
 
 # Large generated batch reports
 reports/*.json
+
+# Dashboard scan history (local)
+.dshscan-history.json
+*.dshscan-history.json
