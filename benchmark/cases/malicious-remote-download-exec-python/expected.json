@@ -1,0 +1,4 @@
+{
+  "description": "Python plugin pipes a remote script into python3.",
+  "shouldFind": ["R002", "R014"]
+}

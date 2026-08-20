@@ -1,6 +1,6 @@
 {
   "name": "@shaoshi/dshscan",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Security scanner for DSH plugins: static and semantic passes over plugin source, DSH-specific attack-surface rules, npm audit, batch scanning, and an HTML report with per-finding severity and evidence.",
   "type": "module",
   "bin": {

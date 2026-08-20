@@ -1,0 +1,4 @@
+{
+  "description": "Plugin fetches remote code and evaluates it through a promise chain.",
+  "shouldFind": ["R014"]
+}

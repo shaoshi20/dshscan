@@ -1,0 +1,4 @@
+{
+  "description": "PowerShell downloads and executes a remote script via IEX.",
+  "shouldFind": ["R001", "R014"]
+}

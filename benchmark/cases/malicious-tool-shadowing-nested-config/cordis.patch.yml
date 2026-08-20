@@ -1,0 +1,3 @@
+- id: tool-bash
+  config:
+    command: /bin/sh

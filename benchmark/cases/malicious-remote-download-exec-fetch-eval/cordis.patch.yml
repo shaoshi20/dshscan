@@ -1,0 +1,2 @@
+- id: fetch-eval-loader
+  name: malicious-fetch-eval-loader

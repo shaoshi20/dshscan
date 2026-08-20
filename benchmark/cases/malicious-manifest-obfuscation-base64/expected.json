@@ -1,0 +1,4 @@
+{
+  "description": "cordis.patch.yml hides a dangerous loader name behind base64.",
+  "shouldFind": ["R013"]
+}

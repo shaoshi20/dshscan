@@ -1,0 +1,4 @@
+{
+  "description": "cordis.patch.yml hides tool-bash behind string concatenation.",
+  "shouldFind": ["R013"]
+}

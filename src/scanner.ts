@@ -836,6 +836,24 @@ const MANIFEST_OBFUSCATION_KEYWORDS = [
   "profiles",
 ];
 
+function decodeEscapes(value: string): string {
+  return value
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+}
+
+function deobfuscateConcat(value: string): string {
+  return value
+    .replace(/["'`]([^"'`]*?)["'`]\s*\+\s*["'`]([^"'`]*?)["'`]/g, (_, a: string, b: string) => a + b)
+    .replace(
+      /\[(["'`][^"'`]*["'`](?:\s*,\s*["'`][^"'`]*["'`])*)\]\s*\.\s*join\s*\(\s*["'`][^"'`]*["'`]\s*\)/g,
+      (_, arr: string) => {
+        const parts = [...arr.matchAll(/["'`]([^"'`]*?)["'`]/g)].map((m) => m[1]);
+        return parts.join("");
+      },
+    );
+}
+
 function scanDshManifestObfuscation(
   fileLabel: string,
   text: string,
@@ -846,11 +864,10 @@ function scanDshManifestObfuscation(
   const hasEscape = /\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}/.test(text);
   const b64Re = /["'`]([A-Za-z0-9+/]{16,}={0,2})["'`]/g;
   const hasBase64 = b64Re.test(text);
-  if (!hasEscape && !hasBase64) return [];
+  const hasConcat = /["'`][^"'`]*["'`]\s*\+|\.join\s*\(/.test(text);
+  if (!hasEscape && !hasBase64 && !hasConcat) return [];
 
-  const decoded = text
-    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+  const decoded = decodeEscapes(deobfuscateConcat(text));
 
   const decodedHit = MANIFEST_OBFUSCATION_KEYWORDS.find((k) =>
     decoded.toLowerCase().includes(k.toLowerCase()),
@@ -919,6 +936,18 @@ function scanRemoteDynamicLoading(
       re: /(?:exec|execSync|spawn|spawnSync)\s*\([^\n]*(?:https?:\/\/|fetch\s*\()/i,
       desc: "process execution from remote content",
     },
+    {
+      re: /(?:fetch|axios|request|got)\s*\([^\n]*\)[\s\S]{0,160}?\.then\s*\([^)]*\)[\s\S]{0,160}?\.then\s*\(\s*(?:eval|Function)\b/i,
+      desc: "fetched content evaluated after promise chain",
+    },
+    {
+      re: /eval\s*\(\s*(?:await\s+)?(?:\(?\s*await\s+)?(?:fetch|axios|request|got)\s*\(/i,
+      desc: "eval of fetched remote content",
+    },
+    {
+      re: /(?:IEX\s*\(|Invoke-Expression\s*\(|iex\s+)[^\n]*(?:DownloadString|Invoke-WebRequest|Invoke-RestMethod|WebClient)/i,
+      desc: "PowerShell remote download and execute",
+    },
   ];
 
   const findings: Finding[] = [];
@@ -958,11 +987,20 @@ function scanToolShadowing(
         const externalField = SHADOWING_FIELDS.find(
           (f) => typeof obj[f] === "string" && obj[f].trim() !== "",
         );
-        if (BUILTIN_TOOL_NAMES.includes(name) && externalField) {
+        const configObj =
+          obj.config && typeof obj.config === "object"
+            ? (obj.config as Record<string, unknown>)
+            : null;
+        const configField = configObj
+          ? SHADOWING_FIELDS.find(
+              (f) => typeof configObj[f] === "string" && configObj[f].trim() !== "",
+            )
+          : undefined;
+        if (BUILTIN_TOOL_NAMES.includes(name) && (externalField || configField)) {
           findings.push(
             buildDshFinding(
               dshRule("R015"),
-              `${fileLabel}: ${path} shadows built-in '${name}' via ${externalField}`,
+              `${fileLabel}: ${path} shadows built-in '${name}' via ${externalField ?? configField}`,
               source,
             ),
           );

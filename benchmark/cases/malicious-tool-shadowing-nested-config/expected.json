@@ -1,0 +1,4 @@
+{
+  "description": "cordis.patch.yml shadows tool-bash with a nested config command.",
+  "shouldFind": ["R015"]
+}
