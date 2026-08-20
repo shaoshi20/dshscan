@@ -17,3 +17,6 @@ reports/*.json
 # Dashboard scan history (local)
 .dshscan-history.json
 *.dshscan-history.json
+
+# Generated benchmark reports
+benchmark-report.json
