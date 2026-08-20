@@ -1,7 +1,7 @@
 {
   "name": "@shaoshi/dshscan",
   "version": "0.3.2",
-  "description": "DShScan - DSH plugin security scanner inspired by NVIDIA SkillSpector",
+  "description": "Security scanner for DSH plugins: static and semantic passes over plugin source, DSH-specific attack-surface rules, npm audit, batch scanning, and an HTML report with per-finding severity and evidence.",
   "type": "module",
   "bin": {
     "dshscan": "dist/main.js"

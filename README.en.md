@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/github/license/shaoshi20/dshscan)](https://github.com/shaoshi20/dshscan/blob/main/LICENSE)
 [![dshbase](https://img.shields.io/badge/dshbase-listed-brightgreen)](https://dshbase.com/plugins/@shaoshi/dshscan/)
 
-DShScan is a SkillSpector-style security scanner for DeepSeek Harness (DSH) plugins. It produces a risk score, severity level, evidence list, and install recommendation before you install any plugin.
+Security scanner for DSH plugins: static and semantic passes over plugin source, DSH-specific attack-surface rules, npm audit, batch scanning, and an HTML report with per-finding severity and evidence.
 
 ## Demo
 

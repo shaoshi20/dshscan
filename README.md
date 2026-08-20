@@ -7,7 +7,7 @@
 
 **[English](README.en.md) | 中文**
 
-DSH 插件安全审查器（DShScan），模仿 NVIDIA SkillSpector 机制，为 dshbase.com 插件目录中的 DSH 插件提供风险评分、严重等级、证据清单和安装建议。
+DSH 插件安全扫描器：对插件源码做静态与语义双通道检查，内置 DSH 特有攻击面规则，集成 npm audit，支持批量扫描，输出带严重等级与证据的 HTML 报告。
 
 ## Demo
 
