@@ -1,0 +1,4 @@
+{
+  "description": "Plugin downloads remote code and pipes it into node.",
+  "shouldFind": ["R014"]
+}

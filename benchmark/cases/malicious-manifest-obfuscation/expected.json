@@ -1,0 +1,4 @@
+{
+  "description": "cordis.patch.yml hides a security row id behind hex escapes.",
+  "shouldFind": ["R010", "R013"]
+}

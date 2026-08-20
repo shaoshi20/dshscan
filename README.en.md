@@ -42,6 +42,8 @@ dsh plugin add @shaoshi/dshscan
 - **npm source scanning**: automatically runs `npm pack` and scans real package contents
 - **Dependency audit**: unpinned versions, remote dependency sources, dependency typosquatting, optional `--audit` via npm audit
 - **DSH manifest validation**: `dsh.bundle`, `cordis.patch.yml`, LICENSE, README
+- **DSH attack-surface rules**: R010 plugin tree injection, R011 browser-side malicious code, R012 profile tampering, R013 manifest obfuscation, R014 remote dynamic loading, R015 built-in tool shadowing
+- **Benchmark suite**: built-in malicious/benign cases; `dshscan --benchmark` reports precision, recall, F1 and per-rule metrics
 - **Custom rules**: `--rules <file>` loads JSON rules
 - **Policy files**: `--policy <file>` with `ignoreRules` / `severityOverrides` / `includeScopes` / `excludeScopes`
 - **Audit logs**: `--audit-log <file>` writes JSONL records
@@ -99,6 +101,12 @@ dshscan --serve --port 8787
 # Batch scan dshbase plugins
 dshscan --batch --limit 50 --index /path/to/dshbase-directory.json --output batch.json --pretty
 dshscan --batch --all --offline --output all.json
+
+# Run the benchmark evaluation suite (summary output)
+dshscan --benchmark --summary
+
+# Write the full benchmark JSON report
+dshscan --benchmark --pretty
 ```
 
 ## Environment Variables

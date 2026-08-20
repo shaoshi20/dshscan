@@ -1,0 +1,4 @@
+{
+  "description": "package.json adds a suspicious DSH profile bundle.",
+  "shouldFind": ["R012"]
+}

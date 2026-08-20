@@ -44,6 +44,8 @@ dsh plugin add @shaoshi/dshscan
 - **npm 源码扫描**：npm 插件可自动 `npm pack` 下载并扫描包内容
 - **依赖审计**：检查未锁定版本、远程依赖源、依赖包名仿冒；可选 `--audit` 调用 npm audit
 - **DSH manifest 校验**：检查 `dsh.bundle`、`cordis.patch.yml`、LICENSE、README
+- **DSH 攻击面规则**：R010 插件树注入、R011 浏览器侧恶意代码、R012 profile 篡改、R013 manifest 混淆、R014 远程动态加载、R015 内置工具影子劫持
+- **Benchmark 评估集**：内置恶意/良性样例，`dshscan --benchmark` 输出查全率、误报率、F1 与逐规则指标
 - **自定义规则**：支持 `--rules <file>` 加载 JSON 规则
 - **策略文件**：支持 `--policy <file>` 配置 ignoreRules / severityOverrides / includeScopes / excludeScopes
 - **审计日志**：支持 `--audit-log <file>` 以 JSONL 记录每个被标记项
@@ -111,6 +113,12 @@ dshscan <plugin-name> --policy policy.json --audit-log audit.jsonl
 
 # 启动本地 Web 可视化面板
 dshscan --serve --port 8787
+
+# 运行 Benchmark 评估集（恶意/良性样例，输出摘要）
+dshscan --benchmark --summary
+
+# 输出完整 Benchmark JSON 报告
+dshscan --benchmark --pretty
 
 # 批量扫描 dshbase 插件（默认离线，按 stars 取前 N）
 dshscan --batch --limit 50 --index /path/to/dshbase-directory.json --output batch.json --pretty

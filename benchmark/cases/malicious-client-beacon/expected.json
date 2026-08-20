@@ -1,0 +1,4 @@
+{
+  "description": "client.mjs sends browser data to an external endpoint via sendBeacon.",
+  "shouldFind": ["R011"]
+}

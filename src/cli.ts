@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { runBenchmark } from "./benchmark.js";
 import { loadIndex, resolveTarget, scanTarget, type ScanOptions } from "./scanner.js";
 import { RULES } from "./rules.js";
 import type { PluginMeta, Policy, ScanReport, Severity } from "./types.js";
@@ -32,6 +34,8 @@ Options:
       --audit-log <file>   Append JSONL audit log for flagged findings
       --serve              Start a local web dashboard
       --port <number>      Port for --serve (default 8787)
+      --benchmark          Run the benchmark evaluation suite
+      --benchmark-dir <d>  Benchmark cases directory (default ./benchmark/cases)
   -h, --help               Show this help
       --version            Show version
 `;
@@ -251,6 +255,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     limit?: string;
     all?: boolean;
     online?: boolean;
+    benchmark?: boolean;
+    "benchmark-dir"?: string;
     help?: boolean;
     version?: boolean;
   };
@@ -279,6 +285,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         limit: { type: "string" },
         all: { type: "boolean" },
         online: { type: "boolean" },
+        benchmark: { type: "boolean" },
+        "benchmark-dir": { type: "string" },
         help: { type: "boolean", short: "h" },
         version: { type: "boolean" },
       },
@@ -300,9 +308,55 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     console.log(`DShScan ${VERSION}`);
     return 0;
   }
-  if (!values.batch && positionals.length === 0) {
+  if (!values.batch && !values.benchmark && positionals.length === 0) {
     console.error(USAGE);
     return 2;
+  }
+
+  if (values.benchmark) {
+    const casesDir = values["benchmark-dir"] ?? join(process.cwd(), "benchmark", "cases");
+    try {
+      const result = runBenchmark(casesDir);
+      if (values.summary) {
+        const lines = [
+          `DShScan ${VERSION} — benchmark`,
+          `Cases: ${result.summary.passedCases}/${result.summary.totalCases} passed`,
+          `TP=${result.summary.tp} FP=${result.summary.fp} FN=${result.summary.fn}`,
+          `Precision=${result.summary.precision} Recall=${result.summary.recall} F1=${result.summary.f1}`,
+          "",
+          ...result.cases.map((c) => {
+            const problems = [
+              ...c.falseNegatives.map((id) => `missing ${id}`),
+              ...c.falsePositives.map((id) => `unexpected ${id}`),
+            ];
+            return `${c.pass ? "PASS" : "FAIL"} ${c.name}${problems.length ? " — " + problems.join(", ") : ""}`;
+          }),
+          "",
+          "Per-rule:",
+          ...Object.entries(result.byRule).map(
+            ([id, m]) => `${id}: precision=${m.precision} recall=${m.recall} f1=${m.f1} (tp=${m.tp} fp=${m.fp} fn=${m.fn})`,
+          ),
+        ];
+        if (values.output) {
+          writeFileSync(values.output, lines.join("\n"), "utf-8");
+          console.error(`Benchmark summary written to ${values.output}`);
+        } else {
+          console.log(lines.join("\n"));
+        }
+      } else {
+        const json = JSON.stringify(result, null, values.pretty ? 2 : 0);
+        if (values.output) {
+          writeFileSync(values.output, json, "utf-8");
+          console.error(`Benchmark report written to ${values.output}`);
+        } else {
+          console.log(json);
+        }
+      }
+    } catch (err) {
+      console.error(`dshscan: benchmark failed: ${err instanceof Error ? err.message : String(err)}`);
+      return 2;
+    }
+    return 0;
   }
 
   const targetRaw = positionals[0] ?? "";

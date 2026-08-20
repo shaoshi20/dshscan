@@ -1,0 +1,4 @@
+{
+  "description": "cordis.patch.yml disables the tool-bash security row.",
+  "shouldFind": ["R010", "R012"]
+}

@@ -475,6 +475,49 @@ const DANGEROUS_LOADER_NAMES = [
   "@deepseek-ai/cordis-plugin-loader",
 ];
 
+const BUILTIN_TOOL_NAMES = [
+  "tool-bash",
+  "tool-pwsh",
+  "tool-shell",
+  "bash",
+  "sh",
+  "zsh",
+  "pwsh",
+  "powershell",
+  "read",
+  "edit",
+  "write",
+  "approval",
+  "permission",
+  "agent",
+  "session",
+  "browser",
+  "web",
+  "code",
+  "ls",
+  "cat",
+  "grep",
+  "find",
+  "sed",
+  "awk",
+  "python",
+  "python3",
+  "node",
+  "npm",
+];
+
+const SHADOWING_FIELDS = [
+  "src",
+  "path",
+  "package",
+  "loader",
+  "module",
+  "command",
+  "exec",
+  "url",
+  "file",
+];
+
 const SECURITY_ROW_IDS = [
   "tool-bash",
   "tool-pwsh",
@@ -762,6 +805,192 @@ function scanProfileTamperPatterns(
   return findings;
 }
 
+function dshRule(id: string) {
+  return DSH_SPECIFIC_RULES.find((r) => r.id === id)!;
+}
+
+function isManifestLikeFile(fileLabel: string): boolean {
+  const lower = fileLabel.toLowerCase();
+  const base = basename(lower);
+  return (
+    /cordis(?:\.patch)?\.ya?ml$/i.test(lower) ||
+    base === "package.json" ||
+    /pnpm-workspace\.ya?ml$/i.test(lower) ||
+    base === ".env" ||
+    base.startsWith(".env.")
+  );
+}
+
+const MANIFEST_OBFUSCATION_KEYWORDS = [
+  "tool-bash",
+  "tool-pwsh",
+  "tool-shell",
+  "approval",
+  "permission",
+  "session-telemetry-otel",
+  "llm-deepseek",
+  "disabled",
+  "cordis-plugin-group",
+  "dsh-mcp-client",
+  "dsh.bundle",
+  "profiles",
+];
+
+function scanDshManifestObfuscation(
+  fileLabel: string,
+  text: string,
+  source: "static" = "static",
+): Finding[] {
+  if (!isManifestLikeFile(fileLabel) && !isCodeFile(fileLabel)) return [];
+
+  const hasEscape = /\\x[0-9a-fA-F]{2}|\\u[0-9a-fA-F]{4}/.test(text);
+  const b64Re = /["'`]([A-Za-z0-9+/]{16,}={0,2})["'`]/g;
+  const hasBase64 = b64Re.test(text);
+  if (!hasEscape && !hasBase64) return [];
+
+  const decoded = text
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+
+  const decodedHit = MANIFEST_OBFUSCATION_KEYWORDS.find((k) =>
+    decoded.toLowerCase().includes(k.toLowerCase()),
+  );
+
+  let base64Hit = "";
+  if (hasBase64) {
+    b64Re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = b64Re.exec(text)) !== null) {
+      try {
+        const decodedB64 = Buffer.from(m[1], "base64").toString("utf8");
+        const hit = MANIFEST_OBFUSCATION_KEYWORDS.find((k) =>
+          decodedB64.toLowerCase().includes(k.toLowerCase()),
+        );
+        if (hit) {
+          base64Hit = hit;
+          break;
+        }
+      } catch {
+        // ignore invalid base64
+      }
+    }
+  }
+
+  const matched = base64Hit || decodedHit;
+  if (!matched) return [];
+  if (!base64Hit && !/disabled|insert|bundle|profile|loader|approval|permission|tool-bash|tool-pwsh/i.test(decoded)) {
+    return [];
+  }
+
+  return [
+    buildDshFinding(
+      dshRule("R013"),
+      `${fileLabel}: obfuscated DSH manifest payload references '${matched}'`,
+      source,
+    ),
+  ];
+}
+
+function scanRemoteDynamicLoading(
+  fileLabel: string,
+  text: string,
+  source: "static" = "static",
+): Finding[] {
+  if (!isCodeFile(fileLabel) && !/\.(?:mjs|js|ts|py|sh|ps1)$/i.test(fileLabel)) return [];
+
+  const patterns: Array<{ re: RegExp; desc: string }> = [
+    {
+      re: /(?:curl|wget|iwr|Invoke-WebRequest|Invoke-RestMethod|fetch)\b[^\n|]*\|\s*(?:sudo\s+)?(?:node|python3?|perl|ruby|powershell|pwsh|bash|sh|zsh|eval|exec)\b/i,
+      desc: "remote download piped to interpreter",
+    },
+    {
+      re: /(?:import|require)\s*\(\s*["']https?:\/\//i,
+      desc: "dynamic import/require of remote URL",
+    },
+    {
+      re: /new\s+Function\s*\(\s*(?:await\s+)?(?:fetch|axios|request|got)\s*\(/i,
+      desc: "remote content compiled via new Function",
+    },
+    {
+      re: /child_process\.(?:exec|execSync|spawn|spawnSync)\s*\([^\n]*(?:https?:\/\/|fetch\s*\()/i,
+      desc: "child process executing remote content",
+    },
+    {
+      re: /(?:exec|execSync|spawn|spawnSync)\s*\([^\n]*(?:https?:\/\/|fetch\s*\()/i,
+      desc: "process execution from remote content",
+    },
+  ];
+
+  const findings: Finding[] = [];
+  for (const p of patterns) {
+    const m = p.re.exec(text);
+    if (m) {
+      findings.push(
+        buildDshFinding(
+          dshRule("R014"),
+          `${fileLabel}: ${p.desc} (${m[0].slice(0, 120)})`,
+          source,
+        ),
+      );
+    }
+  }
+  return findings;
+}
+
+function scanToolShadowing(
+  fileLabel: string,
+  text: string,
+  source: "static" = "static",
+): Finding[] {
+  if (!isManifestLikeFile(fileLabel)) return [];
+  const findings: Finding[] = [];
+
+  const { parsed, data } = tryParseYaml(text);
+  if (parsed) {
+    const walk = (node: unknown, path: string) => {
+      if (Array.isArray(node)) {
+        node.forEach((value, index) => walk(value, `${path}[${index}]`));
+        return;
+      }
+      if (node && typeof node === "object") {
+        const obj = node as Record<string, unknown>;
+        const name = String(obj.name ?? obj.id ?? "").toLowerCase();
+        const externalField = SHADOWING_FIELDS.find(
+          (f) => typeof obj[f] === "string" && obj[f].trim() !== "",
+        );
+        if (BUILTIN_TOOL_NAMES.includes(name) && externalField) {
+          findings.push(
+            buildDshFinding(
+              dshRule("R015"),
+              `${fileLabel}: ${path} shadows built-in '${name}' via ${externalField}`,
+              source,
+            ),
+          );
+        }
+        for (const [key, value] of Object.entries(obj)) {
+          walk(value, `${path}.${key}`);
+        }
+      }
+    };
+    walk(data, "$");
+  } else {
+    const re =
+      /(?:name|id)\s*:\s*["']?(tool-bash|tool-pwsh|tool-shell|bash|sh|zsh|pwsh|powershell|read|edit|write|approval|permission|agent|session|browser|web|code|ls|cat|grep|find|sed|awk|python|python3|node|npm)["']?[\s\S]{0,160}?(?:src|path|package|loader|module|command|exec|url|file)\s*:/i;
+    const m = re.exec(text);
+    if (m) {
+      findings.push(
+        buildDshFinding(
+          dshRule("R015"),
+          `${fileLabel}: shadows built-in '${m[1]}' near external implementation`,
+          source,
+        ),
+      );
+    }
+  }
+
+  return findings;
+}
+
 function scanDshSpecific(fileLabel: string, text: string, source: "static" = "static"): Finding[] {
   const findings: Finding[] = [];
   const lowerFile = fileLabel.toLowerCase();
@@ -859,6 +1088,21 @@ function scanDshSpecific(fileLabel: string, text: string, source: "static" = "st
     } else {
       findings.push(...scanProfileTamperPatterns(fileLabel, text, source));
     }
+  }
+
+  // R013: encoded/obfuscated DSH manifest payload
+  if (isManifestLikeFile(fileLabel) || (isCodeFile(fileLabel) && /(?:\.dsh|cordis|profile)/i.test(text))) {
+    findings.push(...scanDshManifestObfuscation(fileLabel, text, source));
+  }
+
+  // R014: remote dynamic loading / download-and-execute
+  if (isCodeFile(fileLabel) || /\.(?:mjs|js|ts|py|sh|ps1)$/i.test(fileLabel)) {
+    findings.push(...scanRemoteDynamicLoading(fileLabel, text, source));
+  }
+
+  // R015: built-in tool shadowing in DSH manifests
+  if (isManifestLikeFile(fileLabel)) {
+    findings.push(...scanToolShadowing(fileLabel, text, source));
   }
 
   return findings;
@@ -1361,7 +1605,7 @@ export async function scanTarget(target: TargetInfo, opts: ScanOptions = {}): Pr
 
 function assignScope(f: Finding): Finding {
   if (f.scope) return f;
-  if (["R010", "R011", "R012"].includes(f.id)) f.scope = "dsh";
+  if (["R010", "R011", "R012", "R013", "R014", "R015"].includes(f.id)) f.scope = "dsh";
   else if (f.id.startsWith("R")) f.scope = "static";
   else if (f.id.startsWith("M")) f.scope = "metadata";
   else if (f.id.startsWith("D")) f.scope = "dependency";

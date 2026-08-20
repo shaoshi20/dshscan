@@ -138,6 +138,9 @@ const RULE_SCOPES: Record<string, string> = {
   R010: "dsh",
   R011: "dsh",
   R012: "dsh",
+  R013: "dsh",
+  R014: "dsh",
+  R015: "dsh",
   M001: "metadata",
   M002: "metadata",
   M003: "metadata",
@@ -210,6 +213,30 @@ export const DSH_SPECIFIC_RULES: DshRuleSpec[] = [
     title: "DSH profile configuration tampering",
     recommendation:
       "Plugins must not alter profile security config, disable approval/permission rows, or rewrite profile files. Reject any package that attempts to tamper with the DSH profile.",
+  },
+  {
+    id: "R013",
+    severity: "high",
+    category: "dsh-manifest-obfuscation",
+    title: "Encoded/obfuscated DSH manifest payload",
+    recommendation:
+      "Decode and inspect the payload. Encoded security row ids, loader names, or disabled flags are a deliberate bypass signal and should be treated as malicious.",
+  },
+  {
+    id: "R014",
+    severity: "critical",
+    category: "dsh-remote-loading",
+    title: "Remote dynamic loading / download-and-execute in plugin code",
+    recommendation:
+      "Reject plugins that fetch remote code and execute/import it. All plugin code should be vendored, reviewed, and pinned.",
+  },
+  {
+    id: "R015",
+    severity: "high",
+    category: "dsh-tool-shadowing",
+    title: "Built-in DSH tool shadowing / loader row hijack",
+    recommendation:
+      "A plugin row must not shadow built-in tools (tool-bash, read, edit, approval, permission, etc.) with an external or different implementation. Reject the plugin and verify the manifest.",
   },
 ];
 

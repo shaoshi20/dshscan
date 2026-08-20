@@ -1,0 +1,4 @@
+{
+  "description": "Benign plugin should not trigger any R-rule findings.",
+  "shouldFind": []
+}

@@ -1,0 +1,9 @@
+{
+  "name": "malicious-manifest-obfuscation",
+  "version": "1.0.0",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

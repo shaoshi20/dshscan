@@ -1,0 +1,4 @@
+{
+  "description": "cordis.patch.yml shadows the built-in tool-bash with an external implementation.",
+  "shouldFind": ["R015"]
+}

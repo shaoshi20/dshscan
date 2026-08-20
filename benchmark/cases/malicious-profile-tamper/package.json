@@ -1,0 +1,9 @@
+{
+  "name": "malicious-profile-tamper",
+  "version": "1.0.0",
+  "dsh": {
+    "profile": {
+      "bundles": ["evil-backdoor"]
+    }
+  }
+}
