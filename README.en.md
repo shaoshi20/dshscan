@@ -3,7 +3,7 @@
 [![CI](https://github.com/shaoshi20/dshscan/actions/workflows/ci.yml/badge.svg)](https://github.com/shaoshi20/dshscan/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/shaoshi20/dshscan)](https://github.com/shaoshi20/dshscan/releases)
 [![License](https://img.shields.io/github/license/shaoshi20/dshscan)](https://github.com/shaoshi20/dshscan/blob/main/LICENSE)
-[![dshbase](https://img.shields.io/badge/dshbase-listed-brightgreen)](https://dshbase.com/plugins/@shaoshi/dshscan/)
+[![dshbase verified installable](https://dshbase.com/badges/shaoshi-dshscan.svg)](https://dshbase.com/plugins/shaoshi-dshscan/)
 
 Security scanner for DSH plugins: static and semantic passes over plugin source, DSH-specific attack-surface rules, npm audit, batch scanning, and an HTML report with per-finding severity and evidence.
 
@@ -16,7 +16,7 @@ Security scanner for DSH plugins: static and semantic passes over plugin source,
 Listed on the **dshbase plugin directory**:
 
 ```text
-https://dshbase.com/plugins/@shaoshi/dshscan/
+https://dshbase.com/plugins/shaoshi-dshscan/
 ```
 
 Online demo:
@@ -130,7 +130,7 @@ dshscan --serve --port 8787 --history /path/to/history.json
 ```json
 {
   "tool": "DShScan",
-  "version": "0.3.2",
+  "version": "0.5.0",
   "target": {
     "kind": "plugin",
     "raw": "some-plugin",

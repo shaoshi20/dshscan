@@ -3,7 +3,7 @@
 [![CI](https://github.com/shaoshi20/dshscan/actions/workflows/ci.yml/badge.svg)](https://github.com/shaoshi20/dshscan/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/shaoshi20/dshscan)](https://github.com/shaoshi20/dshscan/releases)
 [![License](https://img.shields.io/github/license/shaoshi20/dshscan)](https://github.com/shaoshi20/dshscan/blob/main/LICENSE)
-[![dshbase](https://img.shields.io/badge/dshbase-已收录-brightgreen)](https://dshbase.com/plugins/@shaoshi/dshscan/)
+[![dshbase 实测可装](https://dshbase.com/badges/shaoshi-dshscan.svg)](https://dshbase.com/zh/plugins/shaoshi-dshscan/)
 
 **[English](README.en.md) | 中文**
 
@@ -18,7 +18,7 @@ DSH 插件安全扫描器：对插件源码做静态与语义双通道检查，�
 已收录于 **dshbase 插件目录**：
 
 ```text
-https://dshbase.com/plugins/@shaoshi/dshscan/
+https://dshbase.com/zh/plugins/shaoshi-dshscan/
 ```
 
 在线 Demo：
@@ -145,7 +145,7 @@ dshscan --batch --all --offline --output all.json
 ```json
 {
   "tool": "DShScan",
-  "version": "0.2.1",
+  "version": "0.5.0",
   "target": {
     "kind": "plugin",
     "raw": "some-plugin",
