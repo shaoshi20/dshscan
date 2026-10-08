@@ -58,10 +58,11 @@ export const RULES: Rule[] = [
     category: "network-exfiltration",
     title: "Cleartext HTTP endpoint in code",
     // 排除模板插值（${x} / {x} / %s，含 ${VAR:-http://...} 默认值）、
-    // IPv6 回环 [::1]、W3C/XML 命名空间 URI 与本地/示例域名；
+    // IPv6 回环 [::1]、W3C/XML 命名空间 URI、本地/示例/内部域名（含转义过的
+    // 127\.0\.0\.1 这类正则源码写法）、TEST-NET 文档网段；
     // 只报代码里写死的公网 http:// 端点。
     pattern:
-      /(?<![\w$:{-])http:\/\/(?!\$\{|#\{|\{|%)(?!(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|www\.w3\.org|schemas\.|xmlns\.|purl\.org)[\w./:-]*|(?:[a-z0-9-]+\.)*(?:local|example)(?:\/|:|\s|["']|$)|example\.(?:com|org|net)(?:\/|:|\s|["']|$)|[a-z0-9-]+\.test(?:\/|:|\s|["']|$))[^\s"'`)]{1,200}/i,
+      /(?<![\w$:{-])http:\/\/(?!\$\{|#\{|\{|%)(?!(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|www\.w3\.org|schemas\.|xmlns\.|purl\.org|192\.0\.2\.|198\.51\.100\.|203\.0\.113\.)[\w./:-]*|(?:[a-z0-9-]+\.)*example\.(?:com|org|net)(?![\w-])|(?:[a-z0-9-]+\.)*(?:local|example|internal|origin)(?:\/|:|\s|["']|$)|(?:[a-z0-9-]+\.)+(?:internal|origin|local|test)(?![\w-])|\d{1,3}\\\.(?:\d{1,3}\\\.){2})[^\s"'`)]{1,200}/i,
     recommendation:
       "Use HTTPS for any network communication. If HTTP is required for local development, ensure it is not used to exfiltrate data.",
   },
@@ -82,8 +83,10 @@ export const RULES: Rule[] = [
     severity: "high",
     category: "credential-theft",
     title: "Credential access combined with suspicious code",
+    // 第三段（网络 sink）必须是调用形式，不能是裸词——旧版用 `post` 会命中
+    // 函数名 collect_public_posts、变量名 postBody，把合法代码判成凭据外泄。
     pattern:
-      /(?=.{0,200}(?:process\.env|getenv|os\.environ|environ\[|Deno\.env))(?=.{0,200}(?:api[_-]?key|secret|token|password|passwd|credential|bearer))(?=.{0,200}(?:https?:\/\/|fetch\s*\(|axios|requests\.|urllib|http\.|send|upload|post))/i,
+      /(?=.{0,200}(?:process\.env|getenv|os\.environ|environ\[|Deno\.env))(?=.{0,200}(?:api[_-]?key|secret|token|password|passwd|credential|bearer))(?=.{0,200}(?:https?:\/\/|fetch\s*\(|axios\.|axios\s*\(|requests\.(?:get|post|put|delete|head|patch)\s*\(|urlopen\s*\(|urllib\.|http\.client|sendBeacon\s*\(|\.send\s*\(|\.upload\s*\(|\.post\s*\())/i,
     recommendation:
       "Avoid reading secrets and sending them to external endpoints. Use secret managers and never log or exfiltrate credentials.",
   },
@@ -104,8 +107,10 @@ export const RULES: Rule[] = [
     severity: "medium",
     category: "package-install-script",
     title: "Package manager install script from remote source",
+    // 包管理器名必须是独立命令，不能是 URL/域名里的一段（旧版会把
+    // package.json 里的 "https://npm.pkg.github.com" 判成远端安装脚本）。
     pattern:
-      /(?:npm|pnpm|yarn|pip|pip3|gem|cargo|go\s+(?:install|get))\b[^\n]*(?:https?:\/\/|git\+|github\.com|bit\.ly|tinyurl\.com)/i,
+      /(?<![\w./-])(?:npm|pnpm|yarn|pip|pip3|gem|cargo|go\s+(?:install|get))\b[^\n]*(?:https?:\/\/|git\+|github\.com|bit\.ly|tinyurl\.com)/i,
     recommendation:
       "Install packages from the official registry with pinned versions. Review third-party tarball/Git URLs before use.",
   },
@@ -116,8 +121,10 @@ export const RULES: Rule[] = [
     title: "Prompt injection / instruction override in documentation",
     // 去掉过宽的 "do not tell/show the user" 分支（agent 插件的安装技能里
     // 正常会隐藏自动化步骤）；保留更强的指令覆盖信号。
+    // 去掉裸关键词 `jailbreak`（实测命中过人物设定里的"行话词表"，是纯误报）；
+    // 只保留真正的指令覆盖句式。
     pattern:
-      /(?:ignore\s+(?:all\s+|any\s+|the\s+)?(?:previous|above|prior|earlier|system).{0,60}instructions?|disregard\s+.{0,40}instructions?|you\s+are\s+now\s+(?:a|an|the)\s+[\w-]+\s+(?:agent|assistant|bot|model|system|helper|plugin|skill)|\*\*(?:system|developer)\s+prompt\s*\*\*|jailbreak)/i,
+      /(?:ignore\s+(?:all\s+|any\s+|the\s+)?(?:previous|above|prior|earlier|system).{0,60}instructions?|disregard\s+.{0,40}instructions?|you\s+are\s+now\s+(?:a|an|the)\s+[\w-]+\s+(?:agent|assistant|bot|model|system|helper|plugin|skill)|\*\*(?:system|developer)\s+prompt\s*\*\*)/i,
     recommendation:
       "Treat documentation/README as untrusted data. If the plugin instructs the agent to override instructions or hide behavior, do not install.",
   },

@@ -84,6 +84,12 @@ const DOC_RE = /\.(?:md|markdown|txt|rst)$/i;
 const TEST_RE = /(^|\/)(?:test|tests|__tests__)(\/|$)|(?:\.test|\.spec)\.|(?:_test|_spec)\.|(^|\/)test_/i;
 const DOCKER_RE = /(^|\/)(?:Dockerfile(?:[^/]*)?|docker-compose(?:[^/]*)\.ya?ml)$/i;
 
+// 文档与测试夹具不是可执行内容：网络/凭据/安装来源类规则在 README、CHANGELOG、
+// docs/ 与 .spec 文件里只会命中 badge 链接、示例域名和安装命令（实测占残留告警
+// 的 79%）。执行与注入类规则（R001/R002/R003/R008）在这两类文件里依然生效——
+// agent 会把 README 当指令读，那条路径不能放过。
+const DOC_EXEMPT_RULES = new Set(["R004", "R004b", "R005", "R007"]);
+
 function downgradeSeverity(severity: Severity): Severity {
   switch (severity) {
     case "critical": return "high";
@@ -272,6 +278,7 @@ export function scanText(text: string, fileLabel: string, source: "static" = "st
       // 注释行不参与除 R008（提示注入，针对文档内容）以外的规则，
       // 否则 "// http://..." 或 "# token = ..." 这类注释会制造误报。
       if (rule.id !== "R008" && COMMENT_RE.test(line)) continue;
+      if ((DOC_RE.test(fileLabel) || TEST_RE.test(fileLabel)) && DOC_EXEMPT_RULES.has(rule.id)) continue;
       // R002 不命中 eval 的函数定义（def eval / function eval 是 ML 代码里
       // 常见的 evaluate 命名，不是动态执行）。
       if (rule.id === "R002" && /^\s*(?:async\s+)?def\s+eval\b|^\s*(?:export\s+)?(?:async\s+)?function\s+eval\b/.test(line)) continue;
@@ -290,7 +297,7 @@ export function scanText(text: string, fileLabel: string, source: "static" = "st
 
   // R005 cross-line detection: credential access and network sink often span
   // multiple lines in real code. Look for a 5-line window when no line-level hit.
-  if (!findings.some((f) => f.id === "R005")) {
+  if (!findings.some((f) => f.id === "R005") && !DOC_RE.test(fileLabel) && !TEST_RE.test(fileLabel)) {
     const r005 = RULES.find((r) => r.id === "R005");
     if (r005) {
       for (let i = 0; i < lines.length; i++) {
@@ -595,20 +602,18 @@ function scanPackageDependencies(
       devDependencies?: Record<string, string>;
     };
     const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+    // D001：只报真正无界的版本声明。^ / ~ 是 semver 常规范围，逐个依赖报 medium
+    // 会产生几十条噪音（实测单样本 70 条 = 48% 告警），把真实信号埋掉；
+    // 改为收集后每个 package.json 合并成一条。
+    const unpinned: string[] = [];
     for (const [name, rawVersion] of Object.entries(deps)) {
       const version = String(rawVersion ?? "");
-      if (/^(?:\*|latest)$/i.test(version) || /^[>=<^~]/.test(version)) {
-        findings.push({
-          id: "D001",
-          severity: "medium",
-          category: "dependency-risk",
-          title: "Unpinned dependency version",
-          evidence: `${fileLabel}: ${name}@${version}`,
-          recommendation:
-            "Pin exact versions to reduce supply-chain drift and unexpected updates.",
-          source,
-          rule: "D001",
-        });
+      if (
+        /^(?:\*|latest|)$/i.test(version) ||
+        /^(?:>=|>)\s*\d/.test(version) ||
+        /(?:^|[.\d])(?:x|X|\*)$/.test(version)
+      ) {
+        unpinned.push(`${name}@${version}`);
       }
       if (/^(?:https?:|git\+|github:)/i.test(version)) {
         findings.push({
@@ -625,11 +630,20 @@ function scanPackageDependencies(
       }
       const bare = name.toLowerCase().replace(/^@[^/]+\//, "");
       for (const known of COMMON_DEPENDENCY_NAMES) {
+        // D002：只认真正的拼写错误 —— 编辑距离 1，或"同长度同字母集"的相邻换位
+        // （lodahs/lodash）。不再接受任意距离 ≤2：那会把 @codemirror/commands
+        // 判成 commander 这类毫不相关的正常包。
+        const dist = levenshtein(bare, known);
+        const transposition =
+          dist === 2 &&
+          bare.length === known.length &&
+          [...bare].sort().join("") === [...known].sort().join("");
         if (
           bare !== known &&
           bare.length >= 4 &&
           known.length >= 4 &&
-          levenshtein(bare, known) <= 2
+          bare[0] === known[0] &&
+          (dist <= 1 || transposition)
         ) {
           findings.push({
             id: "D002",
@@ -645,6 +659,19 @@ function scanPackageDependencies(
           break;
         }
       }
+    }
+    if (unpinned.length > 0) {
+      findings.push({
+        id: "D001",
+        severity: "medium",
+        category: "dependency-risk",
+        title: "Unpinned dependency version",
+        evidence: `${fileLabel}: ${unpinned.length} 个依赖使用无界版本（${unpinned.slice(0, 5).join(", ")}${unpinned.length > 5 ? " 等" : ""}）`,
+        recommendation:
+          "Pin exact versions to reduce supply-chain drift and unexpected updates.",
+        source,
+        rule: "D001",
+      });
     }
   } catch {
     // ignore malformed package.json
@@ -868,9 +895,13 @@ function scanDshManifestObfuscation(
   if (!hasEscape && !hasBase64 && !hasConcat) return [];
 
   const decoded = decodeEscapes(deobfuscateConcat(text));
+  const plain = text.toLowerCase();
 
-  const decodedHit = MANIFEST_OBFUSCATION_KEYWORDS.find((k) =>
-    decoded.toLowerCase().includes(k.toLowerCase()),
+  // 关键修正：只有"解码后才出现、原文里并不存在"的关键词才算混淆。
+  // 旧逻辑只要解码文本里出现 permission / disabled / profiles 就报——而这些是
+  // DSH 的正常配置词，任何提到它们的源码都会被判成恶意载荷（实测 56/145 条告警）。
+  const decodedHit = MANIFEST_OBFUSCATION_KEYWORDS.find(
+    (k) => decoded.toLowerCase().includes(k) && !plain.includes(k),
   );
 
   let base64Hit = "";
@@ -895,9 +926,6 @@ function scanDshManifestObfuscation(
 
   const matched = base64Hit || decodedHit;
   if (!matched) return [];
-  if (!base64Hit && !/disabled|insert|bundle|profile|loader|approval|permission|tool-bash|tool-pwsh/i.test(decoded)) {
-    return [];
-  }
 
   return [
     buildDshFinding(
@@ -1075,12 +1103,22 @@ function scanDshSpecific(fileLabel: string, text: string, source: "static" = "st
 
   // R011: client.mjs / browser-side malicious code
   if (isClientFile(fileLabel)) {
-    const clientPatterns: Array<{ re: RegExp; desc: string }> = [
+    // 强信号：明确的浏览器侧外发通道，单独出现即可报。
+    const strongPatterns: Array<{ re: RegExp; desc: string }> = [
       { re: /navigator\.sendBeacon\s*\(|sendBeacon\s*\(/, desc: "sendBeacon exfiltration" },
       {
         re: /new\s+WebSocket\s*\(\s*["'](?!wss?:\/\/)(?!ws:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0))/i,
         desc: "WebSocket to non-local endpoint",
       },
+      { re: /postMessage\s*\(\s*[^,]+,\s*["']\*["']/, desc: "postMessage to *" },
+      {
+        re: /fetch\s*\(\s*["']https?:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|(?:[a-z0-9-]+\.)*local(?:\/|:|\s|["']|$))/i,
+        desc: "external fetch from client code",
+      },
+    ];
+    // 弱信号：在编辑器/输入法/渲染代码里太常见（实测 addEventListener('keydown')、
+    // atob() 都被当成恶意），只有同一文件里存在强信号时才计入。
+    const weakPatterns: Array<{ re: RegExp; desc: string }> = [
       {
         re: /addEventListener\s*\(\s*["'](?:keydown|keypress|input|change|paste)["']/i,
         desc: "input/key logging listener",
@@ -1090,32 +1128,54 @@ function scanDshSpecific(fileLabel: string, text: string, source: "static" = "st
         re: /document\.write\s*\(|innerHTML\s*=|outerHTML\s*=|insertAdjacentHTML\s*\(/,
         desc: "DOM injection",
       },
-      { re: /postMessage\s*\(\s*[^,]+,\s*["']\*["']/, desc: "postMessage to *" },
       {
         re: /atob\s*\(|String\.fromCharCode|eval\s*\(|new\s+Function\s*\(/,
         desc: "obfuscated/eval client code",
       },
-      {
-        re: /fetch\s*\(\s*["']https?:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|(?:[a-z0-9-]+\.)*(?:local|example)(?:\/|:|\s|["']|$))/i,
-        desc: "external fetch from client code",
-      },
     ];
-    for (const p of clientPatterns) {
+
+    const strongHits: Array<{ desc: string; snippet: string }> = [];
+    for (const p of strongPatterns) {
       const m = p.re.exec(text);
-      if (m) {
+      if (m) strongHits.push({ desc: p.desc, snippet: m[0].slice(0, 120) });
+    }
+    if (strongHits.length > 0) {
+      for (const hit of strongHits) {
         findings.push(
-          buildDshFinding(
-            DSH_SPECIFIC_RULES[1],
-            `${fileLabel}: ${p.desc} (${m[0].slice(0, 120)})`,
-            source,
-          ),
+          buildDshFinding(DSH_SPECIFIC_RULES[1], `${fileLabel}: ${hit.desc} (${hit.snippet})`, source),
         );
+      }
+      for (const p of weakPatterns) {
+        const m = p.re.exec(text);
+        if (m) {
+          findings.push(
+            buildDshFinding(
+              DSH_SPECIFIC_RULES[1],
+              `${fileLabel}: ${p.desc} (${m[0].slice(0, 120)})`,
+              source,
+            ),
+          );
+        }
       }
     }
   }
 
   // R012: profile configuration tampering
-  if (isProfileConfigFile(fileLabel) || (isCodeFile(fileLabel) && /(?:\.dsh|profiles|cordis\.patch\.ya?ml)/i.test(text))) {
+  // 代码分支必须"真的写 profile 配置"，且写操作与 profile 路径出现在同一行。
+  // 旧逻辑：文件里既提到 .dsh/profiles 又有任意写操作就报 —— 实测把一个 CI 冒烟
+  // 脚本（注释里明确写着"绝不写入真实 ~/.dsh"）判成了 critical。
+  const writesProfileConfig =
+    isCodeFile(fileLabel) &&
+    !TEST_RE.test(fileLabel) &&
+    !/(^|\/)(?:e2e|examples?|fixtures?)(\/|$)/i.test(fileLabel) &&
+    text.split(/\r?\n/).some(
+      (line) =>
+        /(?:writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|copyFile|renameSync|rmSync|Set-Content|Out-File|Add-Content)/.test(
+          line,
+        ) &&
+        /(?:\.dsh[\\/]?profiles|profiles[\\/][\w.-]+[\\/]|cordis\.patch\.ya?ml)/i.test(line),
+    );
+  if (isProfileConfigFile(fileLabel) || writesProfileConfig) {
     if (isProfileConfigFile(fileLabel)) {
       const structured = scanProfileConfigStructure(fileLabel, text, source);
       if (structured.parsed) {

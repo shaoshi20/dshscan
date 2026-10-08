@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DShScan Pro — 上架前，先把插件过一遍</title>
+<meta name="description" content="DSH 插件安全检查：批量扫描、HTML 报告、CI 门禁、持续更新的攻击面规则。开源 CLI 永久 MIT 免费。">
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#12161b; --line:#242b33; --ink:#e7eaee; --dim:#9aa4b0;
+    --accent:#5eead4; --warn:#f0b429;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,"Cascadia Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:780px;margin:0 auto;padding:56px 24px 96px}
+  h1{font-size:34px;line-height:1.25;margin:0 0 16px;letter-spacing:-.02em}
+  h2{font-size:19px;margin:56px 0 14px;letter-spacing:-.01em}
+  h3{font-size:15px;margin:28px 0 8px;color:var(--ink)}
+  p{margin:0 0 14px;color:#c9d1d9}
+  .sub{font-size:17px;color:var(--dim);margin-bottom:28px}
+  code,kbd{font-family:var(--mono);font-size:.9em;background:#191f26;border:1px solid var(--line);
+    border-radius:5px;padding:1px 6px;color:#d6dee8}
+  pre{background:#0f1318;border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;
+    font-family:var(--mono);font-size:13px;color:#cbd5e1}
+  a{color:var(--accent);text-decoration:none;border-bottom:1px solid #2c6f66}
+  a:hover{border-bottom-color:var(--accent)}
+  .stats{display:flex;gap:14px;flex-wrap:wrap;margin:28px 0 8px}
+  .stat{flex:1 1 190px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .stat b{display:block;font-size:26px;font-family:var(--mono);letter-spacing:-.02em;color:#fff}
+  .stat span{font-size:13px;color:var(--dim)}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:15px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:600;font-size:13px;text-transform:none}
+  td:first-child{width:38%}
+  .yes{color:var(--accent)} .no{color:#5b6673}
+  .cards{display:flex;gap:16px;flex-wrap:wrap;margin:20px 0 8px}
+  .card{flex:1 1 300px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+  .card.pick{border-color:#2c6f66;box-shadow:0 0 0 1px #2c6f66 inset}
+  .card h3{margin:0 0 6px;font-size:16px}
+  .price{font-family:var(--mono);font-size:32px;color:#fff;margin:6px 0 2px}
+  .price small{font-size:13px;color:var(--dim);font-family:inherit}
+  .card ul{margin:12px 0 18px;padding-left:18px;color:#bcc6d1;font-size:14.5px}
+  .card li{margin:5px 0}
+  .btn{display:block;text-align:center;padding:12px 16px;border-radius:9px;font-weight:600;
+    border:1px solid var(--line);color:var(--ink);background:#171d24}
+  .btn.primary{background:var(--accent);color:#04211d;border-color:var(--accent)}
+  .btn:hover{filter:brightness(1.08)}
+  .note{border-left:3px solid var(--warn);background:#1a1610;padding:12px 16px;border-radius:0 8px 8px 0;
+    font-size:14.5px;color:#e8dcc2;margin:20px 0}
+  .disclaimer{font-size:13px;color:#7c8794;margin-top:40px;border-top:1px solid var(--line);padding-top:18px}
+  .tag{display:inline-block;font-family:var(--mono);font-size:12px;color:var(--accent);
+    border:1px solid #2c6f66;border-radius:999px;padding:2px 10px;margin-bottom:18px}
+  details{border-bottom:1px solid var(--line);padding:14px 0}
+  summary{cursor:pointer;font-weight:600;font-size:15px}
+  details p{margin:10px 0 0;color:#bcc6d1;font-size:14.5px}
+  footer{margin-top:56px;color:#6b7683;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">DShScan Pro · 预售</span>
+  <h1>上架前，先把插件过一遍。<br>别人装你的插件之前，也让他们看见这一遍。</h1>
+  <p class="sub">DSH 插件 = 代码 + 提示词 + 权限。一次安装就是一次授权。
+  免费版永久 MIT 开源；Pro 卖的是<b>持续更新的攻击面情报</b>（新恶意模式的规则包 + 月度简报）与<b>团队策略基线</b>。</p>
+
+  <div class="stats">
+    <div class="stat"><b id="s-plugins">7,736</b><span>dshbase 收录插件（本地索引实测）</span></div>
+    <div class="stat"><b id="s-findings">145</b><span>3 个高星样本的告警数（我逐条核对，真问题 0）</span></div>
+    <div class="stat"><b id="s-downloads">720+</b><span>免费版月下载（npm）</span></div>
+  </div>
+
+  <h2>为什么这件事不能靠肉眼</h2>
+  <p>插件的攻击面不在 README 里，而在几个固定的位置：<code>cordis.patch.yml</code> 能往插件树里注入条目；
+  <code>client.mjs</code> 跑在浏览器侧，能读你页面里的东西；profile 配置能被改写；依赖可以是远程动态加载的。
+  这些都不是"看一眼代码"能覆盖的。</p>
+  <p>DShScan 把这几类位置做成固定规则，每条 finding 带证据与修复建议——不是给一个分数就完事。</p>
+
+  <h2>免费版 vs Pro</h2>
+  <p>先说清楚：<b>免费版不会因为 Pro 上线而收窄。</b>现在开源的功能全部保留，永久 MIT。
+  Pro 只卖一样东西——<b>持续更新的情报</b>，因为恶意模式每月都在变，跟它需要有人一直做。</p>
+  <table>
+    <thead><tr><th>能力</th><th>免费版（MIT 开源）</th><th>Pro</th></tr></thead>
+    <tbody>
+      <tr><td>扫描引擎（单插件 / 仓库 / 本地目录 / zip / md）</td><td class="yes">✓</td><td class="yes">✓ 同一引擎</td></tr>
+      <tr><td>基础攻击面规则（P010–P015）</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>批量扫描 / JSON / HTML 报告 / 本地面板</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>policy 策略文件 / 审计日志 JSONL</td><td class="yes">✓</td><td class="yes">✓ + 预置基线</td></tr>
+      <tr><td>新恶意模式规则（每月）</td><td class="no">不含</td><td class="yes">✓ 私有规则包</td></tr>
+      <tr><td>月度威胁简报（本月新出现的绕过手法）</td><td class="no">—</td><td class="yes">✓</td></tr>
+      <tr><td>团队策略基线（多仓一致）+ 规则例外登记</td><td class="no">—</td><td class="yes">✓ 团队版</td></tr>
+      <tr><td>版本间差异报告（这次比上次多了什么风险）</td><td class="yes">✓ 自行 diff</td><td class="yes">✓ 模板化</td></tr>
+    </tbody>
+  </table>
+
+  <h2>定价</h2>
+  <div class="cards">
+    <div class="card pick">
+      <h3>Pro · 个人</h3>
+      <div class="price">¥99 <small>/ 年</small></div>
+      <ul>
+        <li>私有规则包，每月更新</li>
+        <li>月度威胁简报：新恶意模式与绕过手法</li>
+        <li>预置策略基线（个人 / 上架前自检）</li>
+        <li>离线 license，无需账号、不联网校验</li>
+      </ul>
+      <a class="btn primary" id="buy" href="#">预售登记（上线后通知你）</a>
+    </div>
+    <div class="card">
+      <h3>Pro · 团队</h3>
+      <div class="price">¥399 <small>/ 年 · 5 席</small></div>
+      <ul>
+        <li>含个人版全部能力</li>
+        <li>团队策略基线（多仓一致）</li>
+        <li>规则例外登记（把认可的误报固化进策略文件）</li>
+        <li>差异报告模板（版本间新增风险）</li>
+      </ul>
+      <a class="btn" id="buy-team" href="#">预售登记</a>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>这是预售页，不是成品页。</b>现在不收款。登记后我会在 Pro 上线时通知你，届时再决定买不买；
+    如果你登记过、上线后觉得不值，直接忽略即可——没有任何自动扣费。
+  </div>
+
+  <h2>常见问题</h2>
+  <details><summary>为什么开源免费版继续免费，Pro 却要收钱？</summary>
+    <p>免费版是 CLI 与规则引擎，MIT，永久免费，不会因为 Pro 上线而收窄。Pro 收的是两样持续投入的东西：
+    <b>情报</b>（每月新增的恶意模式规则、当月绕过手法简报）和<b>团队策略基线</b>（多仓一致的 ignore / severity 配置与例外登记）。
+    不是一次性代码，是有人一直在跟。</p>
+  </details>
+  <details><summary>license 怎么工作？会不会偷偷联网？</summary>
+    <p>离线 Ed25519 签名 license：一个文件，本地验签，不登录、不联网、不上报。断网环境（CI 常见）可用。</p>
+  </details>
+  <details><summary>扫描器报错了，算谁的责任？</summary>
+    <p>不算任何人的。DShScan 输出的是<b>自动化检测结果</b>，不构成安全审计意见，也不构成"这个插件是安全的"的承诺。
+    每条 finding 都附证据与修复建议，供你自己判断。规则永远有漏报，这也是它持续更新的原因。</p>
+  </details>
+  <details><summary>误报太多怎么办？</summary>
+    <p>Pro 的策略包可以做 ignore / severity 覆盖，把团队认可为噪音的规则压下去，并把这份策略提交进仓库——换人也不丢。</p>
+  </details>
+
+  <h2>免费版现在就能用</h2>
+  <pre>npm i -g @shaoshi/dshscan
+dshscan &lt;插件名&gt;            # 扫一个
+dshscan --batch --limit 50   # 扫一批
+dshscan --serve              # 打开本地报告面板</pre>
+  <p>仓库：<a href="https://github.com/shaoshi20/dshscan">github.com/shaoshi20/dshscan</a> ·
+  在线示例报告：<a href="https://shaoshi20.github.io/dshscan/">shaoshi20.github.io/dshscan</a></p>
+
+  <p class="disclaimer">
+    自动化检测结果，不构成安全审计意见。DShScan 不承诺发现全部问题，也不对安装第三方插件造成的后果负责。
+    本页为预售意向登记，未上线前不收取任何费用。
+  </p>
+  <footer>DShScan · 面向 DeepSeek Harness 插件生态 · 本页无追踪脚本、无 Cookie</footer>
+</div>
+
+<script>
+  // 预购登记走 GitHub Issue（零后端、零成本、公开可查）
+  var REPO = "https://github.com/shaoshi20/dshscan/issues/new";
+  function issueUrl(tier){
+    var title = encodeURIComponent("[预售登记] DShScan Pro " + tier);
+    var body  = encodeURIComponent(
+      "登记层级：" + tier + "\n\n" +
+      "我会在 Pro 上线时收到通知（通过此 issue）。\n\n" +
+      "可选：说一句你最想让它拦住的场景，用于排优先级。\n");
+    return REPO + "?title=" + title + "&body=" + body + "&labels=preorder";
+  }
+  document.getElementById("buy").href = issueUrl("个人 ¥99/年");
+  document.getElementById("buy-team").href = issueUrl("团队 ¥399/年");
+</script>
+</body>
+</html>
