@@ -33,6 +33,16 @@ https://shaoshi20.github.io/dshscan/
 dsh plugin add @shaoshi/dshscan
 ```
 
+## 规则订阅（Pro）
+
+免费版（本仓库，MIT）不会因为 Pro 上线而收窄。Pro 提供的是持续更新的攻击面情报：
+
+- 每月新增的恶意模式规则（私有规则包）
+- 月度威胁简报：当月新出现的绕过手法
+- 团队策略基线（多仓一致的 ignore / severity 配置与例外登记）
+
+预售登记（**暂不收款**）：https://shaoshi20.github.io/dshscan/pro/
+
 ## 功能
 
 - **输入**：插件名 / GitHub 仓库地址 / 本地目录 / zip / Markdown 文件

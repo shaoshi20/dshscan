@@ -31,6 +31,17 @@ Install as a DSH plugin:
 dsh plugin add @shaoshi/dshscan
 ```
 
+## Rule Subscription (Pro)
+
+The free version in this repository stays MIT and will not be narrowed when Pro ships.
+Pro is a subscription to maintained attack-surface intelligence:
+
+- New malicious-pattern rules every month (private rule pack)
+- Monthly threat brief on newly observed bypass techniques
+- Team policy baseline (multi-repo ignore / severity config and exception log)
+
+Pre-order registration (**no payment collected yet**): https://shaoshi20.github.io/dshscan/pro/
+
 ## Features
 
 - **Input**: plugin name / GitHub repo / local directory / zip / Markdown file
